@@ -1,7 +1,7 @@
 ##############################################################################
 ##                                Base Image                                ##
 ##############################################################################
-ARG RENDER=nvidia
+ARG RENDER=base
 FROM python:3.12.7 as python
 USER root
 ENV TZ=Europe/Berlin

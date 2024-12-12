@@ -2,15 +2,13 @@
 ##############################################################################
 ##                            Run the container                             ##
 ##############################################################################
-tensorflow_version="2.11.0"
-
 SRC_CONTAINER=/home/jovyan/workspace/src
 SRC_HOST="$(pwd)"/src
 DATA_CONTAINER=/home/jovyan/data
 DATA_HOST="$(pwd)"/data
 
 docker run \
-  --name rp2024-tf \
+  --name rp2024-bullet \
   --privileged \
   --rm \
   -it \
@@ -18,5 +16,5 @@ docker run \
   -v "$SRC_HOST":"$SRC_CONTAINER":rw \
   -v "$DATA_HOST":"$DATA_CONTAINER":rw \
   -e DISPLAY="$DISPLAY" \
-  --gpus all \
- rp2024/tf:"$tensorflow_version"
+ # --gpus all \
+ rp2024/bullet
