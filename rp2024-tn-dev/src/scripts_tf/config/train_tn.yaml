@@ -1,0 +1,9 @@
+defaults:
+  - defaults
+  - data_generator: tn_data_generator
+  - model: transporter_network
+  - _self_
+
+dataset_directory: ${data_root}/datasets/tn_train_data_orthographic
+model_path: ${data_root}/models/tn_model
+debug: true

@@ -1,0 +1,6 @@
+defaults:
+  - default_hydra_config
+  - default_workspace_bounds
+
+log_level: INFO
+data_root: "/home/jovyan/data"

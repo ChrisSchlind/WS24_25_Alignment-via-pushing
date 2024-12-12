@@ -1,0 +1,75 @@
+<?xml version="0.0" ?>
+<robot name="coordinates">    
+
+    <link name="origin_link">
+    <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="0.00"/>
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+        </inertial>
+    </link>
+
+    <joint name="ee_coordinate_x_joint" type="fixed">
+        <parent link="origin_link"/>
+        <child link="coordinate_x_link"/>
+        <origin rpy="0 0 0.0" xyz="0 0.0 0.0"/>
+    </joint>
+    <joint name="ee_coordinate_y_joint" type="fixed">
+        <parent link="origin_link"/>
+        <child link="coordinate_y_link"/>
+        <origin rpy="0 0 0.0" xyz="0.0 0 0.0"/>
+    </joint>
+    <joint name="ee_coordinate_z_joint" type="fixed">
+        <parent link="origin_link"/>
+        <child link="coordinate_z_link"/>
+        <origin rpy="0 0 0.0" xyz="0.0 0.0 0"/>
+    </joint>
+    <link name="coordinate_x_link">
+        <visual>
+            <geometry>
+                <box size="0.05 0.005 0.005"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0.025 0  0"/>
+            <material name="red">
+                <color rgba="1 0 0 0.5"/>
+            </material>
+        </visual>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="0.00"/>
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+        </inertial>
+    </link>
+    <link name="coordinate_y_link">
+        <visual>
+            <geometry>
+                <box size="0.005 0.05 0.005"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0.025 0"/>
+            <material name="green">
+                <color rgba="0 1 0 0.5"/>
+            </material>
+        </visual>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="0.00"/>
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+        </inertial>
+    </link>
+    <link name="coordinate_z_link">
+        <visual>
+            <geometry>
+                <box size="0.005 0.005 0.05"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0 0.025"/>
+            <material name="blue">
+                <color rgba="0 0 1 0.5"/>
+            </material>
+        </visual>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="0.00"/>
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+        </inertial>
+    </link>
+</robot>

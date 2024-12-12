@@ -1,0 +1,13 @@
+defaults:
+  - defaults
+  - task_factory: simple_grasp_task
+  - oracle: simple_grasp_oracle
+  - camera_factory: static
+  - _self_
+
+debug: true
+render: true
+store_dataset: false
+dataset_directory: ${data_root}/datasets/tn_train_data
+
+n_scenes: 100

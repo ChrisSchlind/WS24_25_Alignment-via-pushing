@@ -1,0 +1,57 @@
+<?xml version="0.0" ?>
+<robot name="coordinates">
+    <material name="yellow">
+        <color rgba="1 1 0 1"/>
+    </material>
+    <material name="purple">
+        <color rgba="0.7 0 0.7 1"/>
+    </material>
+
+    <link name="origin_link">
+    </link>
+
+    <joint name="ee_coordinate_z_joint" type="fixed">
+        <parent link="origin_link"/>
+        <child link="coordinate_z_link"/>
+        <origin rpy="0 0 0.0" xyz="0.0 0.0 -0.2"/>
+    </joint>
+    <link name="coordinate_z_link">
+        <visual>
+            <geometry>
+                <mesh filename="../meshes/cylinder.stl" scale="0.0005 0.0005 0.0035"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <material name="purple"/>
+        </visual>
+    </link>
+
+    <joint name="ee_coordinate_z_point_joint" type="fixed">
+        <parent link="origin_link"/>
+        <child link="coordinate_z_point"/>
+        <origin rpy="0 0 0.0" xyz="0.0 0.0 0"/>
+    </joint>
+    <link name="coordinate_z_point">
+        <visual>
+            <geometry>
+                <sphere radius="0.06"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <material name="yellow"/>
+        </visual>
+    </link>
+
+    <joint name="ee_coordinate_z_head_joint" type="fixed">
+        <parent link="origin_link"/>
+        <child link="coordinate_z_head"/>
+        <origin rpy="0 0 0.0" xyz="0.0 0.0 0.15"/>
+    </joint>
+    <link name="coordinate_z_head">
+        <visual>
+            <geometry>
+                <mesh filename="../meshes/cone.stl" scale="0.0015 0.0015 0.001"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <material name="purple"/>
+        </visual>
+    </link>
+</robot>

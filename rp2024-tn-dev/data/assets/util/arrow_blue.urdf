@@ -1,0 +1,31 @@
+<?xml version="0.0" ?>
+<robot name="coordinates">
+    <material name="blue">
+        <color rgba="0 0 1 1"/>
+    </material>
+
+    <link name="origin_link">
+    </link>
+
+    <joint name="arrow_joint" type="fixed">
+        <parent link="origin_link"/>
+        <child link="arrow_link"/>
+        <origin rpy="0 0 0.0" xyz="0.0 0.0 0.2"/>
+    </joint>
+    <link name="arrow_link">
+        <visual>
+            <geometry>
+                <mesh filename="../meshes/cylinder.stl" scale="0.0005 0.0005 0.0035"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <material name="blue"/>
+        </visual>
+        <visual>
+            <geometry>
+                <mesh filename="../meshes/cone.stl" scale="0.0015 0.0015 0.001"/>
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0 0.15"/>
+            <material name="blue"/>
+        </visual>
+    </link>
+</robot>

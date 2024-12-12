@@ -1,0 +1,18 @@
+camera_config:
+  intrinsics:
+    - 642.730
+    - 0.0
+    - 310.572
+    - 0.0
+    - 642.730
+    - 236.984
+    - 0.0
+    - 0.0
+    - 1.0
+  resolution:
+    - 640
+    - 480
+  depth_range:
+    - 0.1
+    - 50.0
+  record_depth: true

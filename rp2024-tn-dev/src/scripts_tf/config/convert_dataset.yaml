@@ -1,0 +1,11 @@
+defaults:
+  - defaults
+  - _self_
+
+debug: false
+store_dataset: true
+dataset_source_directory: ${data_root}/datasets/tn_train_data
+dataset_target_directory: ${data_root}/datasets/tn_train_data_orthographic
+projection_resolution: [256, 256]
+
+n_scenes: 10

@@ -1,0 +1,4 @@
+_target_: manipulation.task.simple_grasp_task.GraspTaskOracle
+gripper_offset:
+  translation: [0, 0, 0]
+  rotation: [3.14159265359, 0, 1.57079632679]

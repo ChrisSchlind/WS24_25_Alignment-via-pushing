@@ -1,0 +1,3 @@
+_target_: transporter_network.model.TransporterNetworkAttention
+crop_size: 64
+n_orentation_bins: 18

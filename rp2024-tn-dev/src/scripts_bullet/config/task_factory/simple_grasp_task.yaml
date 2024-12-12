@@ -1,0 +1,5 @@
+_target_: manipulation.task.simple_grasp_task.GraspTaskFactory
+n_objects: 5
+grasp_object_factory:
+  _target_: manipulation.task.simple_grasp_task.GraspObjectFactory
+  objects_root: ${data_root}/assets/objects

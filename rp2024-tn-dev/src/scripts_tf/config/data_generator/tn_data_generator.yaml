@@ -1,0 +1,7 @@
+_target_: transporter_network.data_generator.TransporterNetworkDataGenerator
+dataset_directory: ${dataset_directory}
+batch_size: 2
+augment: true
+shuffle: true
+crop_size: 64
+n_orentation_bins: 18
