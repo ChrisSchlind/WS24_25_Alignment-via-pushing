@@ -9,4 +9,4 @@ docker build \
   --build-arg UID="$uid" \
   --build-arg GID="$gid" \
   -f bullet.Dockerfile \
-  -t rp2024/bullet .
+  -t ws2425_avp/bullet .

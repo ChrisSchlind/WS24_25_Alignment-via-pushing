@@ -10,7 +10,7 @@ DATA_CONTAINER=/home/jovyan/data
 DATA_HOST="$(pwd)"/data
 
 docker run \
-  --name rp2024-tf \
+  --name ws2425_avp-tf \
   --privileged \
   --rm \
   -it \
@@ -18,5 +18,4 @@ docker run \
   -v "$SRC_HOST":"$SRC_CONTAINER":rw \
   -v "$DATA_HOST":"$DATA_CONTAINER":rw \
   -e DISPLAY="$DISPLAY" \
- # --gpus all \
- rp2024/tf:"$tensorflow_version"
+ ws2425_avp/tf:"$tensorflow_version"
