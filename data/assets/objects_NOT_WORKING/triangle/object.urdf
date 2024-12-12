@@ -1,7 +1,7 @@
 <?xml version="0.0" ?>
-<robot name="cross">
-    <material name="green">
-        <color rgba="0 0 1 1"/>
+<robot name="triangle">
+    <material name="yellow">
+        <color rgba="1 1 0 1"/>
     </material>
     <link name="baseLink">
         <contact>
@@ -14,32 +14,17 @@
             <mass value="0.2"/>
             <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
         </inertial>
-        ##1
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
-                <box size="0.08 0.025 0.05"/>
+                <mesh filename="package://path/to/your/triangle.obj" scale="1 1 1"/>
             </geometry>
-            <material name="green"/>
+            <material name="yellow"/>
         </visual>
         <collision>
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
-                <box size="0.08 0.025 0.05"/>
-            </geometry>
-        </collision>
-        ##2
-        <visual>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="0.025 0.08 0.05"/>
-            </geometry>
-            <material name="red"/>
-        </visual>
-        <collision>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="0.025 0.08 0.05"/>
+                <mesh filename="package://path/to/your/triangle.obj" scale="1 1 1"/>
             </geometry>
         </collision>
     </link>
