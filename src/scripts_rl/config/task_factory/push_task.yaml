@@ -1,5 +1,6 @@
 _target_: manipulation.task.simple_push_task.PushTaskFactory
 n_objects: 5
 push_object_factory:
-  _target_: manipulation.task.simple_push_task.PushObjectFactory
+  _target_: manipulation.task.push_task.PushObjectFactory
   objects_root: ${data_root}/assets/objects
+

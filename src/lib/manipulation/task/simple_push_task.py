@@ -31,33 +31,19 @@ class PushObjectFactory:
 
 @dataclass
 class PushObject(SceneObject):
-    """
-    Class for objects that can be pushed. A push configuration is required.
-
-    For several objects, there are multiple valid push poses for a successful push execution. In this case we
-    restrict ourselves to planar push actions. This reduces the possible push areas to points and segments.
-    We have only implemented segments, because a segment with identical endpoints represents a point.
-    """
     urdf_path: str
     offset: np.ndarray
     push_poses: List[Dict[str, Any]] = field(default_factory=list)
 
     def push_to_destination(self, destination: np.ndarray):
-        """
-        Push the object to the specified destination.
-        """
-        # Implement the logic to push the object to the destination using pybullet
         pass
 
 
 class PushTaskFactory:
-    def __init__(self, n_objects: int, t_bounds, 
-                 r_bounds: np.ndarray = np.array([[0, 0], [0, 0], [0, 2 * np.pi]]),
-                 push_object_factory: PushObjectFactory = None):
-        self.n_objects = n_objects
+    def __init__(self, push_object_factory: PushObjectFactory, t_bounds: np.ndarray, r_bounds: np.ndarray, n_objects: int):
         self.t_bounds = t_bounds
         self.r_bounds = r_bounds
-
+        self.n_objects = n_objects
         self.unique_id_counter = 0
         self.push_object_factory = push_object_factory
 
@@ -98,45 +84,3 @@ class PushTaskFactory:
 class PushTask:
     def __init__(self, push_objects: List[PushObject]):
         self.push_objects = push_objects
-
-    def get_info(self):
-        info = {
-            '_target_': 'manipulation.task.simple_push_task.PushTask',
-            'push_objects': self.push_objects,
-        }
-        return info
-
-    def get_object_with_unique_id(self, unique_id: int):
-        for o in self.push_objects:
-            if o.unique_id == unique_id:
-                return o
-        raise RuntimeError('object id mismatch')
-
-    def setup(self, env):
-        for o in self.push_objects:
-            new_object_id = env.add_object(o)
-            o.object_id = new_object_id
-
-    def clean(self, env):
-        for o in self.push_objects:
-            env.remove_object(o.object_id)
-
-
-class PushTaskOracle:
-    def __init__(self, pusher_offset):
-        self.pusher_offset = Affine(**pusher_offset).matrix
-
-    def solve(self, task: PushTask):
-        push_object = random.choice(task.push_objects)
-        return self.get_push_pose(push_object)
-    
-    def solve_all(self, task: PushTask):
-        solutions = []
-        for o in task.push_objects:
-            solutions.append(self.get_push_pose(o))
-        return solutions
-    
-    def get_push_pose(self, push_object: PushObject):
-        push_pose = random.choice(push_object.push_poses)
-        push_pose = push_object.pose @ Affine(**push_pose).matrix @ self.pusher_offset
-        return push_pose
