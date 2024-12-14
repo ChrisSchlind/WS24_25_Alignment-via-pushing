@@ -1,0 +1,4 @@
+How to use tf docker:
+1. Generate dataset inside bullet docker with the scripts_bullet/generate_tn_data.py
+2. Convert dataset to orthographic with the scripts_tf/convert_dataset.py
+3. It is possible to display the dataset after the convertion with the scripts_tf/view_data.py

@@ -1,0 +1,9 @@
+defaults:
+  - defaults
+  - task_factory: simple_push_task
+  - oracle: simple_push_oracle
+  - camera_factory: static
+  - _self_
+
+debug: true
+render: true
