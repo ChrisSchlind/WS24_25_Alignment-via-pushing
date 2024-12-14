@@ -10,8 +10,6 @@ import cv2
 from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
 
-from manipulation.task.simple_grasp_task import GraspTaskFactory
-
 from image_util import draw_pose
 
 @hydra.main(version_base=None, config_path="config", config_name="test_env")
@@ -27,7 +25,7 @@ def main(cfg: DictConfig) -> None:
     # the bounds for objects should be on the ground plane of the robots workspace
     t_bounds[2, 1] = t_bounds[2, 0]
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
-    oracle = instantiate(cfg.oracle)
+    #oracle = instantiate(cfg.oracle)
     t_center = np.mean(t_bounds, axis=1)
     camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
 
@@ -36,8 +34,7 @@ def main(cfg: DictConfig) -> None:
     robot.home()
     task = task_factory.create_task()
     task.setup(env)
-    task_info = task.get_info()
-    pose = oracle.solve(task)
+    #pose = oracle.solve(task)
     observations = [camera.get_observation() for camera in camera_factory.cameras]
 
     if cfg.debug:

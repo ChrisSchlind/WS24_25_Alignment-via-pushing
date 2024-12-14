@@ -7,7 +7,6 @@ import json
 
 from manipulation.simulation_object import SceneObject, is_overlapping
 from transform.affine import Affine
-from transform.random import sample_pose_from_segment
 
 
 class PushObjectFactory:
@@ -32,42 +31,19 @@ class PushObjectFactory:
 
 @dataclass
 class PushObject(SceneObject):
-    """
-    Class for objects that can be pushed. A push configuration is required.
+    urdf_path: str
+    offset: np.ndarray
+    push_poses: List[Dict[str, Any]] = field(default_factory=list)
 
-    For several objects, there are multiple valid pusher poses for a successful push execution. In this case we
-    restrict ourselves to planar push actions with a 2-jaw parallel pusher. This reduces the possible push areas
-    to points and segments. We have only implemented segments, because a segment with identical endpoints
-    represents a point.
-    """
-    static: bool = False
-    push_config: List[Dict[str, Any]] = field(default_factory=lambda: [])
-
-    def get_valid_pose(self):
-        """
-        This method samples and returns a valid pusher pose relative to the object's pose, based on the segments
-        defined in the push configuration.
-        """
-        push_area = random.sample(self.push_config, 1)[0]
-
-        valid_pose = None
-
-        if push_area['type'] == 'segment':
-            point_a = Affine(translation=push_area['point_a'])
-            point_b = Affine(translation=push_area['point_b'])
-            valid_pose = sample_pose_from_segment(point_a, point_b)
-
-        return valid_pose
+    def push_to_destination(self, destination: np.ndarray):
+        pass
 
 
 class PushTaskFactory:
-    def __init__(self, n_objects: int, t_bounds, 
-                 r_bounds: np.ndarray = np.array([[0, 0], [0, 0], [0, 2 * np.pi]]),
-                 push_object_factory: PushObjectFactory = None):
-        self.n_objects = n_objects
+    def __init__(self, push_object_factory: PushObjectFactory, t_bounds: np.ndarray, r_bounds: np.ndarray, n_objects: int):
         self.t_bounds = t_bounds
         self.r_bounds = r_bounds
-
+        self.n_objects = n_objects
         self.unique_id_counter = 0
         self.push_object_factory = push_object_factory
 
@@ -108,14 +84,3 @@ class PushTaskFactory:
 class PushTask:
     def __init__(self, push_objects: List[PushObject]):
         self.push_objects = push_objects
-
-    def setup(self, env):
-        for obj in self.push_objects:
-            env.add_object(obj)
-
-    def get_info(self):
-        return {"push_objects": [obj.get_info() for obj in self.push_objects]}
-
-    def clean(self, env):
-        for obj in self.push_objects:
-            env.remove_object(obj)
