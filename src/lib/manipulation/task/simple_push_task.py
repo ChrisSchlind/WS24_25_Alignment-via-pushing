@@ -27,6 +27,10 @@ class PushObjectFactory:
         kwargs.update(push_args)
         offset = Affine(**push_args['offset']).matrix
         kwargs['offset'] = offset
+        # Assign a random RGBA color
+        rgba_color = [random.random() for _ in range(3)] + [1.0]  # Random RGB and full opacity
+        kwargs['color'] = rgba_color
+        print("kwargs:", kwargs)
         return PushObject(**kwargs)
 
 
@@ -38,6 +42,7 @@ class PushObject(SceneObject):
     """
     static: bool = False
     push_config: List[Dict[str, Any]] = field(default_factory=lambda: [])
+    color: List[float] = field(default_factory=lambda: [1.0, 0.0, 0.0, 1.0])
 
     '''def get_valid_pose(self):
         """
@@ -107,8 +112,8 @@ class PushTask:
 
     def get_info(self):
         info = {
-            '_target_': 'manipulation.task.simple_grasp_task.GraspTask',
-            'grasp_objects': self.push_objects,
+            '_target_': 'manipulation.task.simple_push_task.PushTask',
+            'push_objects': self.push_objects,
         }
         return info
 

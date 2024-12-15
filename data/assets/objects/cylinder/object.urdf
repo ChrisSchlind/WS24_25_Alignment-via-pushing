@@ -1,8 +1,5 @@
 <?xml version="0.0" ?>
 <robot name="cylinder">
-    <material name="gray">
-        <color rgba="0 1 1 1"/>
-    </material>
     <link name="baseLink">
         <contact>
             <lateral_friction value="1.2"/>

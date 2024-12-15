@@ -19,6 +19,14 @@ class BulletEnv:
                 useFixedBase=o.static,
                 globalScaling=scale,
                 flags=self.bullet_client.URDF_ENABLE_CACHED_GRAPHICS_SHAPES)
+            
+        # Apply the color to all visual shapes of the object
+        for i in range(self.bullet_client.getNumJoints(obj_id)):
+            self.bullet_client.changeVisualShape(obj_id, i, rgbaColor=o.color)
+        
+        # Also apply the color to the base link (link index -1)
+        self.bullet_client.changeVisualShape(obj_id, -1, rgbaColor=o.color)
+        
         o.object_id = obj_id
         return obj_id
 
