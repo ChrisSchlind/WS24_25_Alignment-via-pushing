@@ -48,8 +48,6 @@ def main(cfg: DictConfig) -> None:
 
             # Convert observations to orthographic view
             height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
-            print("height_maps", height_map)
-            print("colormaps", colormap)
             # Display orthographic view
             display_orthographic(height_map, colormap, cfg.workspace_bounds)
 
