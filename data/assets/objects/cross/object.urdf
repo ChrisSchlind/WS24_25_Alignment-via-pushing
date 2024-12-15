@@ -17,7 +17,6 @@
             <geometry>
                 <box size="0.08 0.025 0.05"/>
             </geometry>
-            <material name="green"/>
         </visual>
         <collision>
             <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -31,7 +30,6 @@
             <geometry>
                 <box size="0.025 0.08 0.05"/>
             </geometry>
-            <material name="red"/>
         </visual>
         <collision>
             <origin rpy="0 0 0" xyz="0 0 0"/>

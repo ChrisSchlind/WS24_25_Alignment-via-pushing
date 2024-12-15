@@ -30,7 +30,6 @@ class PushObjectFactory:
         # Assign a random RGBA color
         rgba_color = [random.random() for _ in range(3)] + [1.0]  # Random RGB and full opacity
         kwargs['color'] = rgba_color
-        print("kwargs:", kwargs)
         return PushObject(**kwargs)
 
 
