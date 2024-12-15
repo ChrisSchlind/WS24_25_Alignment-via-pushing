@@ -128,5 +128,4 @@ def display_orthographic(heightmap, colormap, workspace_bounds):
         normalized_heightmap = np.zeros_like(heightmap)
 
     cv2.imshow('Heightmap', heightmap)
-    cv2.imshow('Colormap', colormap)
-    cv2.waitKey(0)            
+    cv2.imshow('Colormap', colormap)         
