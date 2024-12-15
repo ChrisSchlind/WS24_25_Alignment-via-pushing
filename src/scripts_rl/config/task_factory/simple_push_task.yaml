@@ -2,5 +2,9 @@ _target_: manipulation.task.simple_push_task.PushTaskFactory
 n_objects: 5
 push_object_factory:
   _target_: manipulation.task.simple_push_task.PushObjectFactory
-  objects_root: ${data_root}/assets/areas
+  objects_root: ${data_root}/assets/objects
+push_area_factory:
+  _target_: manipulation.task.simple_push_task.PushAreaFactory
+  areas_root: ${data_root}/assets/areas
+
 
