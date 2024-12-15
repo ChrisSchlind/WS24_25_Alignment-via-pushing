@@ -35,15 +35,11 @@ class PushObject(SceneObject):
     """
     Class for objects that can be pushed. A push configuration is required.
 
-    For several objects, there are multiple valid pusher poses for a successful push execution. In this case we
-    restrict ourselves to planar push actions with a 2-jaw parallel pusher. This reduces the possible push areas
-    to points and segments. We have only implemented segments, because a segment with identical endpoints
-    represents a point.
     """
     static: bool = False
     push_config: List[Dict[str, Any]] = field(default_factory=lambda: [])
 
-    def get_valid_pose(self):
+    '''def get_valid_pose(self):
         """
         This method samples and returns a valid pusher pose relative to the object's pose, based on the segments
         defined in the push configuration.
@@ -57,7 +53,7 @@ class PushObject(SceneObject):
             point_b = Affine(translation=push_area['point_b'])
             valid_pose = sample_pose_from_segment(point_a, point_b)
 
-        return valid_pose
+        return valid_pose'''
 
 
 class PushTaskFactory:
@@ -109,13 +105,24 @@ class PushTask:
     def __init__(self, push_objects: List[PushObject]):
         self.push_objects = push_objects
 
-    def setup(self, env):
-        for obj in self.push_objects:
-            env.add_object(obj)
-
     def get_info(self):
-        return {"push_objects": [obj.get_info() for obj in self.push_objects]}
+        info = {
+            '_target_': 'manipulation.task.simple_grasp_task.GraspTask',
+            'grasp_objects': self.push_objects,
+        }
+        return info
+
+    def get_object_with_unique_id(self, unique_id: int):
+        for o in self.push_objects:
+            if o.unique_id == unique_id:
+                return o
+        raise RuntimeError('object id mismatch')
+
+    def setup(self, env):
+        for o in self.push_objects:
+            new_object_id = env.add_object(o)
+            o.object_id = new_object_id
 
     def clean(self, env):
-        for obj in self.push_objects:
-            env.remove_object(obj)
+        for o in self.push_objects:
+            env.remove_object(o.object_id)
