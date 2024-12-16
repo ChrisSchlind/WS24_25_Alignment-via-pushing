@@ -36,21 +36,12 @@ def main(cfg: DictConfig) -> None:
     task.setup(env)
     observations = [camera.get_observation() for camera in camera_factory.cameras]
 
-    for o in task.push_objects:
-        print(o.object_id)
-        print(o.area_id)
-        print(o.unique_id)
-        print("")
-    for a in task.push_areas:
-        print(a.object_id)
-        print(a.area_id)
-        print(a.unique_id)
-        print("")
-
 
     obj, area = task.get_object_and_area_with_same_id(0)
     print("Object: ", obj)
     print("Area: ", area)
+
+    
 
     
     
