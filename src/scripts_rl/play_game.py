@@ -63,12 +63,11 @@ def main(cfg: DictConfig) -> None:
 
         # Move robot
         gripper_offset = Affine(cfg.gripper_offset.translation, cfg.gripper_offset.rotation)
-        z_offset = Affine([0, 0, 0.1])
+        z_offset = Affine([0, 0, 0.05])
         start_action = obj_pose * z_offset * gripper_offset
         end_action = area_pose * z_offset * gripper_offset
         robot.ptp(start_action)
         robot.lin(end_action)
-        robot.lin(home_pose)
         
         task.clean(env)
 
