@@ -102,6 +102,8 @@ class PushTaskFactory:
         self.r_bounds = r_bounds
 
         self.unique_id_counter = 0
+        self.object_id_counter = 0
+        self.area_id_counter = 0
         self.push_object_factory = push_object_factory
         self.push_area_factory = push_area_factory
         self.areas_root = areas_root
@@ -110,8 +112,18 @@ class PushTaskFactory:
         self.unique_id_counter += 1
         return self.unique_id_counter - 1
 
+    def get_object_id(self):
+        self.object_id_counter += 1
+        return self.object_id_counter - 1
+
+    def get_area_id(self):
+        self.area_id_counter += 1
+        return self.area_id_counter - 1
+
     def create_task(self):
         self.unique_id_counter = 0
+        self.object_id_counter = 0
+        self.area_id_counter = 0
         n_objects = np.random.randint(1, self.n_objects + 1)
         object_types = random.choices(self.push_object_factory.object_types, k=n_objects)
         push_objects = []
@@ -130,6 +142,7 @@ class PushTaskFactory:
         corrected_pose = manipulation_object.offset @ object_pose.matrix
         manipulation_object.pose = corrected_pose
         manipulation_object.unique_id = self.get_unique_id()
+        manipulation_object.object_id = self.get_object_id()
         return manipulation_object
     
     def generate_push_area(self, area_type, added_objects, added_areas, color):
@@ -138,6 +151,7 @@ class PushTaskFactory:
         corrected_pose = manipulation_area.offset @ area_pose.matrix
         manipulation_area.pose = corrected_pose
         manipulation_area.unique_id = self.get_unique_id()
+        manipulation_area.area_id = self.get_area_id()
         return manipulation_area
 
     def get_non_overlapping_pose(self, min_dist, objects, areas=None):
@@ -176,24 +190,43 @@ class PushTask:
         for o in self.push_objects:
             if o.unique_id == unique_id:
                 return o
-        raise RuntimeError('object id mismatch')
+        raise RuntimeError('object unique id mismatch')
     
     def get_area_with_unique_id(self, unique_id: int):
         for a in self.push_areas:
             if a.unique_id == unique_id:
                 return a
+        raise RuntimeError('area unique id mismatch')
+    
+    def get_object_with_matching_id(self, object_id: int):
+        for o in self.push_objects:
+            if o.object_id == object_id:
+                return o
+        raise RuntimeError('object id mismatch')
+    
+    def get_area_with_matching_id(self, area_id: int):
+        for a in self.push_areas:
+            if a.area_id == area_id:
+                return a
         raise RuntimeError('area id mismatch')
+
+    def get_object_and_area_with_same_id(self, id: int):
+        obj = self.get_object_with_matching_id(id)
+        area = self.get_area_with_matching_id(id)
+        return obj, area
 
     def setup(self, env):
         for o in self.push_objects:
+            original_object_id = o.object_id
             new_object_id = env.add_object(o)
-            o.object_id = new_object_id
+            o.object_id = original_object_id
         for a in self.push_areas:
+            original_area_id = a.area_id
             new_area_id = env.add_area(a)
-            a.object_id = new_area_id
+            a.area_id = original_area_id
 
     def clean(self, env):
         for o in self.push_objects:
             env.remove_object(o.object_id)
         for a in self.push_areas:
-            env.remove_area(a.object_id)
+            env.remove_area(a.area_id)

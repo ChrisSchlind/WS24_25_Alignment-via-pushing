@@ -30,30 +30,37 @@ def main(cfg: DictConfig) -> None:
 
     logger.info("Instantiation completed.")
 
-    for _ in range(10):
-        robot.home()
-        task = task_factory.create_task()
-        task.setup(env)
-        observations = [camera.get_observation() for camera in camera_factory.cameras]
+    
+    robot.home()
+    task = task_factory.create_task()
+    task.setup(env)
+    observations = [camera.get_observation() for camera in camera_factory.cameras]
 
-        if cfg.debug:
-            image_copy = copy.deepcopy(observations[0]["rgb"])
-            cv2.imshow("rgb", image_copy)
-            depth_copy = copy.deepcopy(observations[0]["depth"])
-            # rescale for visualization
-            depth_copy = depth_copy / 2.0
-            cv2.imshow("depth", depth_copy)
 
-            # Convert observations to orthographic view
-            height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
-            # Display orthographic view
-            display_orthographic(height_map, colormap, cfg.workspace_bounds)
+    obj, area = task.get_object_and_area_with_same_id(0)
+    print("Object: ", obj)
+    print("Area: ", area)
 
-            pressed_key = cv2.waitKey(0)
-            if pressed_key == ord('q'):
-                break
+    '''if cfg.debug:
+        image_copy = copy.deepcopy(observations[0]["rgb"])
+        cv2.imshow("rgb", image_copy)
+        depth_copy = copy.deepcopy(observations[0]["depth"])
+        # rescale for visualization
+        depth_copy = depth_copy / 2.0
+        cv2.imshow("depth", depth_copy)
 
-        task.clean(env)
+        # Convert observations to orthographic view
+        height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
+        # Display orthographic view
+        display_orthographic(height_map, colormap, cfg.workspace_bounds)
+
+        pressed_key = cv2.waitKey(0)
+        if pressed_key == ord('q'):
+            break'''
+    
+    cv2.waitKey(0)
+
+    task.clean(env)
 
     with stdout_redirected():
         bullet_client.disconnect()

@@ -6,4 +6,4 @@ defaults:
 
 debug: true
 render: true
-projection_resolution: [512, 512]
+auto_mode: false
