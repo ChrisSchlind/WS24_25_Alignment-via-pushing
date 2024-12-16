@@ -1,3 +1,0 @@
-_target_: bullet_env.ur10_cell.UR10Cell
-urdf_path: ${data_root}/assets/urdf/robot.urdf
-workspace_bounds: ${workspace_bounds}
