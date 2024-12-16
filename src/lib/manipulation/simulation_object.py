@@ -29,6 +29,7 @@ class SceneObject:
     """
     urdf_path: str = None
     object_id: int = -1
+    area_id: int = -1
     static: bool = True
     pose: np.ndarray = field(default_factory=lambda: np.eye(4))
     min_dist: float = 0

@@ -1,10 +1,10 @@
 {
-  "min_dist": 0.059,
+  "min_dist": 0.068,
   "offset": {
     "translation": [
       0.0,
       0.0,
-      0.025
+      0.0
     ],
     "rotation": [
       0.0,
@@ -12,7 +12,7 @@
       0.0
     ]
   },
-  "grasp_config": [
+  "push_config": [
     {
       "type": "segment",
       "point_a": [

@@ -1,0 +1,11 @@
+_target_: bullet_env.camera.StaticPolarCameraFactory
+defaults:
+  - default_camera_config
+polar_angles:
+  - - 0.0 
+    - 0.78539816339
+  - - 2.09439510239
+    - 0.78539816339 
+  - - -2.09439510239
+    - 0.78539816339
+radius: 0.8

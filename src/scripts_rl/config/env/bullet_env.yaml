@@ -1,0 +1,2 @@
+_target_: bullet_env.env.BulletEnv
+coordinate_axes_urdf_path: ${data_root}/assets/util/coordinate_axes.urdf

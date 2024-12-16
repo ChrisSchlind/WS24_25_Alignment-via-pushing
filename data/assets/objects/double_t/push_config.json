@@ -12,7 +12,7 @@
         0.0
       ]
     },
-    "grasp_config": [
+    "push_config": [
       {
         "type": "segment",
         "point_a": [
