@@ -7,7 +7,6 @@ import json
 
 from manipulation.simulation_object import SceneObject, is_overlapping
 from transform.affine import Affine
-from transform.random import sample_pose_from_segment
 
 
 class PushObjectFactory:
@@ -42,22 +41,6 @@ class PushObject(SceneObject):
     static: bool = False
     push_config: List[Dict[str, Any]] = field(default_factory=lambda: [])
     color: List[float] = field(default_factory=lambda: [1.0, 0.0, 0.0, 1.0])
-
-    '''def get_valid_pose(self):
-        """
-        This method samples and returns a valid pusher pose relative to the object's pose, based on the segments
-        defined in the push configuration.
-        """
-        push_area = random.sample(self.push_config, 1)[0]
-
-        valid_pose = None
-
-        if push_area['type'] == 'segment':
-            point_a = Affine(translation=push_area['point_a'])
-            point_b = Affine(translation=push_area['point_b'])
-            valid_pose = sample_pose_from_segment(point_a, point_b)
-
-        return valid_pose'''
     
 class PushAreaFactory:
     def __init__(self, areas_root: str, areas_types: Union[List[str], None] = None):

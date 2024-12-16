@@ -6,6 +6,7 @@ from omegaconf import DictConfig
 from hydra.utils import instantiate
 import copy
 import cv2
+import random
 
 from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
@@ -30,24 +31,46 @@ def main(cfg: DictConfig) -> None:
 
     logger.info("Instantiation completed.")
 
-    
-    robot.home()
-    task = task_factory.create_task()
-    task.setup(env)
-    observations = [camera.get_observation() for camera in camera_factory.cameras]
+    # get the current end effector pose
+    home_pose = robot.get_eef_pose()
 
+    for _ in range(10):    
+        robot.home()
+        task = task_factory.create_task()
+        task.setup(env)
+        observations = [camera.get_observation() for camera in camera_factory.cameras]
 
-    obj, area = task.get_object_and_area_with_same_id(0)
-    print("Object: ", obj)
-    print("Area: ", area)
+        # randomly select an object and area
+        id = random.randint(0, len(task.push_objects) - 1)
+        obj, area = task.get_object_and_area_with_same_id(id)
 
-    
+        # get the object and area poses
+        obj_pose = env.get_pose(obj.unique_id)
+        area_pose = env.get_pose(area.unique_id)
+        print("Object pose: ", obj_pose)
+        print("Area pose: ", area_pose)
 
-    
-    
-    cv2.waitKey(0)
+        # Display
+        image_copy = copy.deepcopy(observations[0]["rgb"])
+        cv2.imshow("rgb", image_copy)
+        depth_copy = copy.deepcopy(observations[0]["depth"])
+        # rescale for visualization
+        depth_copy = depth_copy / 2.0
+        cv2.imshow("depth", depth_copy)
+        key_pressed = cv2.waitKey(0)
+        if key_pressed == ord("q"):
+            break
 
-    task.clean(env)
+        # Move robot
+        #gripper_offset = Affine(**cfg.gripper_offset).matrix
+        z_offset = Affine([0, 0, 0.1])
+        start_action = obj_pose * z_offset #* gripper_offset
+        end_action = area_pose * z_offset #* gripper_offset
+        robot.ptp(start_action)
+        robot.lin(end_action)
+        robot.lin(home_pose)
+        
+        task.clean(env)
 
     with stdout_redirected():
         bullet_client.disconnect()
