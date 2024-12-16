@@ -36,27 +36,23 @@ def main(cfg: DictConfig) -> None:
     task.setup(env)
     observations = [camera.get_observation() for camera in camera_factory.cameras]
 
+    for o in task.push_objects:
+        print(o.object_id)
+        print(o.area_id)
+        print(o.unique_id)
+        print("")
+    for a in task.push_areas:
+        print(a.object_id)
+        print(a.area_id)
+        print(a.unique_id)
+        print("")
+
 
     obj, area = task.get_object_and_area_with_same_id(0)
     print("Object: ", obj)
     print("Area: ", area)
 
-    '''if cfg.debug:
-        image_copy = copy.deepcopy(observations[0]["rgb"])
-        cv2.imshow("rgb", image_copy)
-        depth_copy = copy.deepcopy(observations[0]["depth"])
-        # rescale for visualization
-        depth_copy = depth_copy / 2.0
-        cv2.imshow("depth", depth_copy)
-
-        # Convert observations to orthographic view
-        height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
-        # Display orthographic view
-        display_orthographic(height_map, colormap, cfg.workspace_bounds)
-
-        pressed_key = cv2.waitKey(0)
-        if pressed_key == ord('q'):
-            break'''
+    
     
     cv2.waitKey(0)
 

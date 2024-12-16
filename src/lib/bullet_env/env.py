@@ -29,12 +29,12 @@ class BulletEnv:
         # Also apply the color to the base link (link index -1)
         self.bullet_client.changeVisualShape(obj_id, -1, rgbaColor=o.color)
         
-        o.object_id = obj_id
-        return obj_id
+        # Set the unique id of the object for later reference e.g. for removing the object
+        o.unique_id = obj_id
 
-    def remove_object(self, object_id):
+    def remove_object(self, unique_id):
         with stdout_redirected():
-            self.bullet_client.removeBody(object_id)
+            self.bullet_client.removeBody(unique_id)
         self.bullet_client.stepSimulation()
 
     def add_area(self, a, scale=1) -> int:
@@ -55,12 +55,12 @@ class BulletEnv:
         # Also apply the color to the base link (link index -1)
         self.bullet_client.changeVisualShape(area_id, -1, rgbaColor=a.color)
         
-        a.area_id = area_id
-        return area_id
+        # Set the unique id of the area for later reference e.g. for removing the area
+        a.unique_id = area_id
 
-    def remove_area(self, area_id):
+    def remove_area(self, unique_id):
         with stdout_redirected():
-            self.bullet_client.removeBody(area_id)
+            self.bullet_client.removeBody(unique_id)
         self.bullet_client.stepSimulation() 
 
     def spawn_coordinate_frame(self, pose, scale=1):
@@ -76,8 +76,12 @@ class BulletEnv:
             self.remove_object(c_id)
         self.coordinate_ids = []
 
-    def get_object_pose(self, object_id: int):
-        pos, quat = self.bullet_client.getBasePositionAndOrientation(object_id)
+    def get_object_pose(self, unique_id: int):
+        pos, quat = self.bullet_client.getBasePositionAndOrientation(unique_id)
+        return Affine(pos, quat)
+    
+    def get_area_pose(self, unique_id: int):
+        pos, quat = self.bullet_client.getBasePositionAndOrientation(unique_id)
         return Affine(pos, quat)
     
     def get_link_index(self, body_id: int, link_name: str):

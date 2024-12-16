@@ -217,16 +217,12 @@ class PushTask:
 
     def setup(self, env):
         for o in self.push_objects:
-            original_object_id = o.object_id
-            new_object_id = env.add_object(o)
-            o.object_id = original_object_id
+            env.add_object(o)
         for a in self.push_areas:
-            original_area_id = a.area_id
-            new_area_id = env.add_area(a)
-            a.area_id = original_area_id
+            env.add_area(a)
 
     def clean(self, env):
         for o in self.push_objects:
-            env.remove_object(o.object_id)
+            env.remove_object(o.unique_id)
         for a in self.push_areas:
-            env.remove_area(a.area_id)
+            env.remove_area(a.unique_id)
