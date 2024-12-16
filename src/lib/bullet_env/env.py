@@ -76,11 +76,7 @@ class BulletEnv:
             self.remove_object(c_id)
         self.coordinate_ids = []
 
-    def get_object_pose(self, unique_id: int):
-        pos, quat = self.bullet_client.getBasePositionAndOrientation(unique_id)
-        return Affine(pos, quat)
-    
-    def get_area_pose(self, unique_id: int):
+    def get_pose(self, unique_id: int):
         pos, quat = self.bullet_client.getBasePositionAndOrientation(unique_id)
         return Affine(pos, quat)
     
