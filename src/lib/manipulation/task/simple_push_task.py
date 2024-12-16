@@ -114,7 +114,7 @@ class PushTaskFactory:
         for object_type in object_types:
             push_object = self.generate_push_object(object_type, push_objects)
             push_objects.append(push_object)
-            push_area = self.generate_push_area(object_type, push_areas, push_object.color)
+            push_area = self.generate_push_area(object_type, push_areas, push_object)
             push_areas.append(push_area)
 
         return PushTask(push_objects, push_areas)
@@ -128,9 +128,10 @@ class PushTaskFactory:
         manipulation_object.object_id = self.get_object_id()
         return manipulation_object
     
-    def generate_push_area(self, area_type, added_areas, color):
-        manipulation_area = self.push_area_factory.create_push_area(area_type, color)
-        area_pose = self.get_non_overlapping_pose(manipulation_area.min_dist, added_areas)
+    def generate_push_area(self, area_type, added_areas, push_object):
+        manipulation_area = self.push_area_factory.create_push_area(area_type, push_object.color)
+        tmp_areas = added_areas + [push_object] # prevents overlapping between object and corresponding area
+        area_pose = self.get_non_overlapping_pose(manipulation_area.min_dist, tmp_areas)
         corrected_pose = manipulation_area.offset @ area_pose.matrix
         manipulation_area.pose = corrected_pose
         manipulation_area.unique_id = self.get_unique_id()
