@@ -112,32 +112,32 @@ class PushTaskFactory:
         push_objects = []
         push_areas = []
         for object_type in object_types:
-            push_object = self.generate_push_object(object_type, push_objects, push_areas)
+            push_object = self.generate_push_object(object_type, push_objects)
             push_objects.append(push_object)
-            push_area = self.generate_push_area(object_type, push_objects, push_areas, push_object.color)
+            push_area = self.generate_push_area(object_type, push_areas, push_object.color)
             push_areas.append(push_area)
 
         return PushTask(push_objects, push_areas)
 
-    def generate_push_object(self, object_type, added_objects, added_areas):
+    def generate_push_object(self, object_type, added_objects):
         manipulation_object = self.push_object_factory.create_push_object(object_type)
-        object_pose = self.get_non_overlapping_pose(manipulation_object.min_dist, added_objects, added_areas)
+        object_pose = self.get_non_overlapping_pose(manipulation_object.min_dist, added_objects)
         corrected_pose = manipulation_object.offset @ object_pose.matrix
         manipulation_object.pose = corrected_pose
         manipulation_object.unique_id = self.get_unique_id()
         manipulation_object.object_id = self.get_object_id()
         return manipulation_object
     
-    def generate_push_area(self, area_type, added_objects, added_areas, color):
+    def generate_push_area(self, area_type, added_areas, color):
         manipulation_area = self.push_area_factory.create_push_area(area_type, color)
-        area_pose = self.get_non_overlapping_pose(manipulation_area.min_dist, added_objects, added_areas)
+        area_pose = self.get_non_overlapping_pose(manipulation_area.min_dist, added_areas)
         corrected_pose = manipulation_area.offset @ area_pose.matrix
         manipulation_area.pose = corrected_pose
         manipulation_area.unique_id = self.get_unique_id()
         manipulation_area.area_id = self.get_area_id()
         return manipulation_area
 
-    def get_non_overlapping_pose(self, min_dist, objects, areas=None):
+    def get_non_overlapping_pose(self, min_dist, objects):
         counter = 0
         overlapping = True
         new_t_bounds = np.array(self.t_bounds)
@@ -146,8 +146,6 @@ class PushTaskFactory:
         while overlapping:
             random_pose = Affine.random(t_bounds=new_t_bounds, r_bounds=self.r_bounds)
             overlapping = is_overlapping(random_pose, min_dist, objects)
-            # check overlapping between areas and objects
-            overlapping = is_overlapping(random_pose, min_dist, areas) or overlapping
 
             if counter > 1000:
                 raise RuntimeError('Could not find non-overlapping pose')

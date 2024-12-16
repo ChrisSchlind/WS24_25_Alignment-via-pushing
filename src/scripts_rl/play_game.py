@@ -13,7 +13,7 @@ from transform.affine import Affine
 from convert_util import convert_to_orthographic, display_orthographic
 
 
-@hydra.main(version_base=None, config_path="config", config_name="test_env")
+@hydra.main(version_base=None, config_path="config", config_name="play_game")
 def main(cfg: DictConfig) -> None:
     logger.remove()
     logger.add(sys.stderr, level=cfg.log_level)
@@ -62,10 +62,10 @@ def main(cfg: DictConfig) -> None:
             break
 
         # Move robot
-        #gripper_offset = Affine(**cfg.gripper_offset).matrix
+        gripper_offset = Affine(cfg.gripper_offset.translation, cfg.gripper_offset.rotation)
         z_offset = Affine([0, 0, 0.1])
-        start_action = obj_pose * z_offset #* gripper_offset
-        end_action = area_pose * z_offset #* gripper_offset
+        start_action = obj_pose * z_offset * gripper_offset
+        end_action = area_pose * z_offset * gripper_offset
         robot.ptp(start_action)
         robot.lin(end_action)
         robot.lin(home_pose)
