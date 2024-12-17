@@ -29,7 +29,7 @@ def main(cfg: DictConfig) -> None:
     camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
 
     logger.info("Instantiation completed.")
-       
+
     robot.home()
     task = task_factory.create_task()
     task.setup(env)
@@ -44,7 +44,7 @@ def main(cfg: DictConfig) -> None:
     area_pose = env.get_pose(area.unique_id)
     if cfg.auto_mode:
         print("Object pose: ", obj_pose)
-        print("Area pose: ", area_pose) 
+        print("Area pose: ", area_pose)
 
     # Move robot to start position
     gripper_offset = Affine(cfg.gripper_offset.translation, cfg.gripper_offset.rotation)
@@ -52,13 +52,14 @@ def main(cfg: DictConfig) -> None:
     start_pose = start_pose * gripper_offset
     robot.ptp(start_pose)
 
-
     # Define Manual control
     switch = {
         ord("a"): Affine(translation=[-0.03, 0, 0]),
         ord("d"): Affine(translation=[0.03, 0, 0]),
         ord("w"): Affine(translation=[0, -0.03, 0]),
         ord("s"): Affine(translation=[0, 0.03, 0]),
+        ord("e"): Affine(translation=[0, 0, -0.01]),
+        ord("x"): Affine(translation=[0, 0, +0.01]),
     }
 
     # Control settings
@@ -68,6 +69,8 @@ def main(cfg: DictConfig) -> None:
     logger.info("s: move backward")
     logger.info("a: move left")
     logger.info("d: move right")
+    logger.info("e: move up")
+    logger.info("x: move down")
     logger.info("q: quit")
     logger.info("Press any key to start")
     logger.info("Movement control is relative to the camera view displayed in the opencv window")
@@ -92,15 +95,14 @@ def main(cfg: DictConfig) -> None:
             robot.ptp(start_action)
             robot.lin(end_action)
         else:
-            current_pose = robot.get_eef_pose()     
+            current_pose = robot.get_eef_pose()
             action = switch.get(key_pressed, None)
             if action:
-                new_pose = current_pose* action
+                new_pose = current_pose * action
                 logger.info(f"Moving robot to {new_pose.translation}")
                 robot.ptp(new_pose)
                 logger.info("Robot movement completed")
-                      
-        
+
     # Shut down
     task.clean(env)
 
