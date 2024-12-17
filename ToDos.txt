@@ -1,0 +1,25 @@
+--------------------------------------------------------------------------------------------------------
+#                                           ToDo List
+--------------------------------------------------------------------------------------------------------
+## Priority 1 (sehr hoch)
+
+
+## Priority 2
+- JupyterNotebooks von Gergely studieren (RL), verstehen sodass dann grob ne Ahnung
+- Masse, Reibung und Trägheitstensoren anpassen
+
+
+## Priority 3
+- Checken, ob TCP perfekt senkrecht & nicht driftet
+
+
+## Priority 4 (optional)
+
+
+--------------------------------------------------------------------------------------------------------
+#                                            Erledigt
+--------------------------------------------------------------------------------------------------------
+- Unser environment (alles wo grasp draufsteht, löschen) säubern
+- Ein einziges Dockerfile erstellen, das auf TF base besteht, und trotzdem alles von pybullet kann/hat
+
+
