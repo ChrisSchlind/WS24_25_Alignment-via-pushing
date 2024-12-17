@@ -8,7 +8,6 @@ import copy
 import cv2
 
 from bullet_env.util import setup_bullet_client, stdout_redirected
-from transform.affine import Affine
 from convert_util import convert_to_orthographic, display_orthographic
 
 

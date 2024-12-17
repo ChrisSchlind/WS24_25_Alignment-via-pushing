@@ -1,8 +1,5 @@
 <?xml version="0.0" ?>
 <robot name="triangle">
-    <material name="yellow">
-        <color rgba="1 1 0 1"/>
-    </material>
     <link name="baseLink">
         <contact>
             <lateral_friction value="1.2"/>

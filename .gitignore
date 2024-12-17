@@ -1,4 +1,2 @@
 *.pyc
-*.hdf5
 data/models/
-data/datasets/

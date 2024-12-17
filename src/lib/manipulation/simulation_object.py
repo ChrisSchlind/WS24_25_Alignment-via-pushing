@@ -21,6 +21,7 @@ class SceneObject:
     Class variables:
     :var str urdf_path: path to the urdf describing the physical properties of the object
     :var int object_id: id of object from the simulation - if there is one
+    :var int area_ida: id of area from the simulation - if there is one
     :var bool static: indicates whether the object can be moved
     :var Affine pose: 6D pose of the object
     :var float min_dist: encompassing radius, for non-overlapping object placement
