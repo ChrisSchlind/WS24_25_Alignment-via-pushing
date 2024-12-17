@@ -32,8 +32,7 @@ def main(cfg: DictConfig) -> None:
 
     robot.home()
     task = task_factory.create_task()
-    task.setup(env)
-    observations = [camera.get_observation() for camera in camera_factory.cameras]
+    task.setup(env)    
 
     # randomly select an object and area
     id = random.randint(0, len(task.push_objects) - 1)
@@ -71,11 +70,13 @@ def main(cfg: DictConfig) -> None:
     logger.info("d: move right")
     logger.info("e: move up")
     logger.info("x: move down")
+    logger.info("r: reset environment")
     logger.info("q: quit")
     logger.info("Press any key to start")
     logger.info("Movement control is relative to the camera view displayed in the opencv window")
 
     while key_pressed != ord("q"):
+        observations = [camera.get_observation() for camera in camera_factory.cameras]
         # Display
         image_copy = copy.deepcopy(observations[0]["rgb"])
         # Convert to rgb for visualization
@@ -103,8 +104,15 @@ def main(cfg: DictConfig) -> None:
                 robot.ptp(new_pose)
                 logger.info("Robot movement completed")
 
+        if key_pressed == ord("r"):
+            robot.ptp(start_pose)
+            task.reset_env(env)
+            logger.info("Environment reset completed")
+                      
+        
     # Shut down
     task.clean(env)
+    logger.info("Task cleanup completed")
 
     with stdout_redirected():
         bullet_client.disconnect()
