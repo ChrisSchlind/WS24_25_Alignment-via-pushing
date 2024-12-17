@@ -6,7 +6,8 @@
 
 ## Priority 2
 - JupyterNotebooks von Gergely studieren (RL), verstehen sodass dann grob ne Ahnung
-- Masse, Reibung und Trägheitstensoren anpassen
+- "End-Game" Mathe einfügen, wenn Objekt und Area gut genug überlappen
+    -> Idee: Overlap-Ratio Obj/Area berechnen, Overlap-Ratio Obj/Tisch berechnen, und Threshold definieren
 
 
 ## Priority 3
@@ -21,5 +22,6 @@
 --------------------------------------------------------------------------------------------------------
 - Unser environment (alles wo grasp draufsteht, löschen) säubern
 - Ein einziges Dockerfile erstellen, das auf TF base besteht, und trotzdem alles von pybullet kann/hat
+- Masse, Reibung und Trägheitstensoren anpassen
 
 
