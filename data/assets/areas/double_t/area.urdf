@@ -6,18 +6,21 @@
             <mass value="0.0"/>
             <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
         </inertial>
+        ## 1
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0"/>
             <geometry>
                 <box size="0.03 0.06 0.0005"/>
             </geometry>
         </visual>
+        ## 2
         <visual>
             <origin rpy="0 0 0" xyz="0 0.045 0"/>
             <geometry>
                 <box size="0.06 0.03 0.0005"/>
             </geometry>
-        </visual>        
+        </visual>
+        ## 3     
         <visual>
             <origin rpy="0 0 0" xyz="0 -0.045 0"/>
             <geometry>

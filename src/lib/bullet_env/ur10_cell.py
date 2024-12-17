@@ -46,8 +46,7 @@ class UR10Cell:
         self.controllable_joints = self.setup_joints()
         logger.debug("Controllable joints: {}".format(self.controllable_joints))
         logger.info("Robot loaded")
-        # self.gripper = RobotiqGripper(bullet_client=bullet_client, robot_id=self.robot_id)     # Commented out to avoid error, as no longer a gripper but only a cylinder is used
-
+        
     def setup_joints(self):
         all_joints = []
         active_joints = []
@@ -168,64 +167,3 @@ class UR10Cell:
                 if len(self.current_sequence) == 0:
                     break
 
-
-class RobotiqGripper:
-    def __init__(self, bullet_client, robot_id, mimic_parent_name="finger_joint"):
-        self.bullet_client = bullet_client
-        self.opened = True
-        self.robot_id = robot_id
-
-        joints = []
-        n_joints = self.bullet_client.getNumJoints(self.robot_id)
-        for i in range(n_joints):
-            info = list(self.bullet_client.getJointInfo(self.robot_id, i))
-            controllable = info[2] != p.JOINT_FIXED
-            args = [info[0], info[1].decode("utf-8"), info[3], *info[6:12], controllable]
-            info = JointInfo(*args)
-            joints.append(info)
-        self.mimic_parent_id = [joint.id for joint in joints if joint.name == mimic_parent_name][0]
-        logger.debug(f"Mimic parent id: {self.mimic_parent_id}")
-
-        mimic_children_names = {
-            "right_outer_knuckle_joint": 1,
-            "left_inner_finger_joint": -1,
-            "right_inner_finger_joint": -1,
-            "right_inner_knuckle_joint": 1,
-            "left_inner_knuckle_joint": 1,
-        }
-        self.mimic_child_multiplier = {joint.id: mimic_children_names[joint.name] for joint in joints if joint.name in mimic_children_names}
-
-        self.setup_joints()
-        logger.info("Gripper loaded")
-
-    def setup_joints(self):
-        for joint_id, multiplier in self.mimic_child_multiplier.items():
-            c = self.bullet_client.createConstraint(
-                self.robot_id,
-                self.mimic_parent_id,
-                self.robot_id,
-                joint_id,
-                jointType=p.JOINT_GEAR,
-                jointAxis=[0, 1, 0],
-                parentFramePosition=[0, 0, 0],
-                childFramePosition=[0, 0, 0],
-            )
-            self.bullet_client.changeConstraint(c, gearRatio=multiplier, maxForce=10000, erp=1)
-
-    def close(self):
-        logger.debug("Closing gripper")
-        max_force = 5
-        self.bullet_client.setJointMotorControl2(self.robot_id, self.mimic_parent_id, p.VELOCITY_CONTROL, targetVelocity=10.0, force=max_force)
-        for _ in range(200):
-            self.bullet_client.stepSimulation()
-
-    def open(self):
-        logger.debug("Opening gripper")
-        _, _, _, _ = self.bullet_client.getJointState(self.robot_id, self.mimic_parent_id)
-        self.bullet_client.setJointMotorControl2(self.robot_id, self.mimic_parent_id, p.POSITION_CONTROL, targetPosition=0.3, force=50)
-        for _ in range(200):
-            self.bullet_client.stepSimulation()
-
-    def get_state(self):
-        position_parent_joint, _, _, _ = self.bullet_client.getJointState(self.robot_id, self.mimic_parent_id)
-        return position_parent_joint

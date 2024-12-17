@@ -10,7 +10,6 @@ import random
 
 from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
-from convert_util import convert_to_orthographic, display_orthographic
 
 
 @hydra.main(version_base=None, config_path="config", config_name="play_game")
@@ -31,8 +30,6 @@ def main(cfg: DictConfig) -> None:
 
     logger.info("Instantiation completed.")
 
-    # get the current end effector pose
-    home_pose = robot.get_eef_pose()
 
     for _ in range(10):    
         robot.home()
