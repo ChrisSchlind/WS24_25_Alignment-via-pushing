@@ -1,5 +1,5 @@
-_target_: bullet_env.parallax_camera.ParallaxCamera
-height: 0.95
+_target_: bullet_env.teletentric_camera.TeletentricCamera
+height: 0.5
 resolution: [500, 500]
 intrinsics:
   - 642.730

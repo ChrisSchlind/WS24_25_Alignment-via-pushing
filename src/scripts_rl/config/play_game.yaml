@@ -2,7 +2,7 @@ defaults:
   - defaults
   - task_factory: simple_push_task
   - camera_factory: static
-  - parallax_camera: ../parallax_camera_config
+  - teletentric_camera: ../teletentric_camera_config
   - _self_
 
 debug: true

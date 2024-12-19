@@ -35,8 +35,8 @@ def main(cfg: DictConfig) -> None:
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
     t_center = np.mean(t_bounds, axis=1)
     camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
-    parallax_camera = instantiate(cfg.parallax_camera, bullet_client=bullet_client, t_center=t_center)
-    draw_camera_direction(bullet_client, parallax_camera.pose)
+    teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center)
+    draw_camera_direction(bullet_client, teletentric_camera.pose)
 
     logger.info("Instantiation completed.")
 
@@ -109,10 +109,10 @@ def main(cfg: DictConfig) -> None:
         # Display orthographic view
         display_orthographic(height_map, colormap, cfg.workspace_bounds)
 
-        # Display parallax camera view
-        parallax_observation = parallax_camera.get_observation()
-        parallax_image = cv2.cvtColor(parallax_observation["rgb"], cv2.COLOR_BGR2RGB)
-        cv2.imshow("parallax_rgb", parallax_image)
+        # Display teletentric camera view
+        teletentric_observation = teletentric_camera.get_observation()
+        teletentric_image = cv2.cvtColor(teletentric_observation["rgb"], cv2.COLOR_BGR2RGB)
+        cv2.imshow("teletentric_rgb", teletentric_image)
 
         key_pressed = cv2.waitKey(0)
 
