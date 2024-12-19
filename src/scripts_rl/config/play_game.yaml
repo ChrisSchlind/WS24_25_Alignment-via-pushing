@@ -2,6 +2,7 @@ defaults:
   - defaults
   - task_factory: simple_push_task
   - camera_factory: static
+  - parallax_camera: ../parallax_camera_config
   - _self_
 
 debug: true
@@ -15,3 +16,8 @@ gripper_offset:
   rotation: [3.14159265359, 0, 1.57079632679]
 
 fixed_z_height: 0.005
+
+workspace_bounds:
+  - [0.35, 0.85]
+  - [-0.25, 0.25]
+  - [-0.0125, 0.35]

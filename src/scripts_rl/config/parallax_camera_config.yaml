@@ -1,0 +1,17 @@
+_target_: bullet_env.parallax_camera.ParallaxCamera
+height: 0.95
+resolution: [500, 500]
+intrinsics:
+  - 642.730
+  - 0.0
+  - 250.0
+  - 0.0
+  - 642.730
+  - 250.0
+  - 0.0
+  - 0.0
+  - 1.0
+depth_range:
+  - 0.1
+  - 50.0
+record_depth: true

@@ -13,6 +13,13 @@ from transform.affine import Affine
 from convert_util import convert_to_orthographic, display_orthographic
 
 
+def draw_camera_direction(bullet_client, camera_pose, length=0.1):
+    """Draws a line indicating the camera's direction."""
+    start_pos = camera_pose.translation
+    end_pos = start_pos + camera_pose.rotation @ np.array([0, 0, length])
+    bullet_client.addUserDebugLine(start_pos, end_pos, [1, 0, 0], 2)
+
+
 @hydra.main(version_base=None, config_path="config", config_name="play_game")
 def main(cfg: DictConfig) -> None:
     logger.remove()
@@ -28,6 +35,8 @@ def main(cfg: DictConfig) -> None:
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
     t_center = np.mean(t_bounds, axis=1)
     camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
+    parallax_camera = instantiate(cfg.parallax_camera, bullet_client=bullet_client, t_center=t_center)
+    draw_camera_direction(bullet_client, parallax_camera.pose)
 
     logger.info("Instantiation completed.")
 
@@ -94,14 +103,19 @@ def main(cfg: DictConfig) -> None:
         # rescale for visualization
         depth_copy = depth_copy / 2.0
         cv2.imshow("depth", depth_copy)
-        
+
         # Convert observations to orthographic view
         height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
         # Display orthographic view
         display_orthographic(height_map, colormap, cfg.workspace_bounds)
-        
+
+        # Display parallax camera view
+        parallax_observation = parallax_camera.get_observation()
+        parallax_image = cv2.cvtColor(parallax_observation["rgb"], cv2.COLOR_BGR2RGB)
+        cv2.imshow("parallax_rgb", parallax_image)
+
         key_pressed = cv2.waitKey(0)
-        
+
         if cfg.auto_mode:
             # Move robot
             z_offset = Affine([0, 0, 0.05])
