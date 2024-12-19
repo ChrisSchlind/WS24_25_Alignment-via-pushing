@@ -7,7 +7,7 @@
 ## Priority 2
 - JupyterNotebooks von Gergely studieren (RL), verstehen sodass dann grob ne Ahnung
 - "End-Game" Mathe einfügen, wenn Objekt und Area gut genug überlappen
-    -> Idee: Overlap-Ratio Obj/Area berechnen, Overlap-Ratio Obj/Tisch berechnen, und Threshold definieren
+    -> Idee: In Orthografischer Projektion: Overlap-Ratio Obj/Area berechnen, Overlap-Ratio Obj/Tisch berechnen, und Threshold definieren
 
 
 ## Priority 3
