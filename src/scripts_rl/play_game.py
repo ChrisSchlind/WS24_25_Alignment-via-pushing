@@ -20,6 +20,29 @@ def draw_camera_direction(bullet_client, camera_pose, length=0.1):
     bullet_client.addUserDebugLine(start_pos, end_pos, [1, 0, 0], 2)
 
 
+def update_observation_window(camera_factory, teletentric_camera, cfg, bullet_client):
+    observations = [camera.get_observation() for camera in camera_factory.cameras]
+    # Display
+    image_copy = copy.deepcopy(observations[0]["rgb"])
+    # Convert to rgb for visualization
+    image_copy = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
+    cv2.imshow("rgb", image_copy)
+    depth_copy = copy.deepcopy(observations[0]["depth"])
+    # rescale for visualization
+    depth_copy = depth_copy / 2.0
+    cv2.imshow("depth", depth_copy)
+
+    # Convert observations to orthographic view
+    height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
+    # Display orthographic view
+    display_orthographic(height_map, colormap, cfg.workspace_bounds)
+
+    # Display teletentric camera view
+    teletentric_observation = teletentric_camera.get_observation()
+    teletentric_image = cv2.cvtColor(teletentric_observation["rgb"], cv2.COLOR_BGR2RGB)
+    cv2.imshow("teletentric_rgb", teletentric_image)
+
+
 @hydra.main(version_base=None, config_path="config", config_name="play_game")
 def main(cfg: DictConfig) -> None:
     logger.remove()
@@ -86,29 +109,12 @@ def main(cfg: DictConfig) -> None:
     logger.info("Movement control is relative to the camera view displayed in the opencv window")
 
     while key_pressed != ord("q"):
-        # Update observation window
-        observations = [camera.get_observation() for camera in camera_factory.cameras]
-        # Display
-        image_copy = copy.deepcopy(observations[0]["rgb"])
-        # Convert to rgb for visualization
-        image_copy = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
-        cv2.imshow("rgb", image_copy)
-        depth_copy = copy.deepcopy(observations[0]["depth"])
-        # rescale for visualization
-        depth_copy = depth_copy / 2.0
-        cv2.imshow("depth", depth_copy)
-
-        # Convert observations to orthographic view
-        height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
-        # Display orthographic view
-        display_orthographic(height_map, colormap, cfg.workspace_bounds)
-
-        # Display teletentric camera view
-        teletentric_observation = teletentric_camera.get_observation()
-        teletentric_image = cv2.cvtColor(teletentric_observation["rgb"], cv2.COLOR_BGR2RGB)
-        cv2.imshow("teletentric_rgb", teletentric_image)
-
-        key_pressed = cv2.waitKey(0)
+        # Continuously update the observation window until a key is pressed
+        while True:
+            update_observation_window(camera_factory, teletentric_camera, cfg, bullet_client)
+            key_pressed = cv2.waitKey(1)
+            if key_pressed != -1:
+                break
 
         if cfg.auto_mode:
             # Move robot
