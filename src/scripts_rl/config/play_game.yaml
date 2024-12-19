@@ -8,6 +8,8 @@ debug: true
 render: true
 auto_mode: false
 
+projection_resolution: [512, 512]
+
 gripper_offset:
   translation: [0, 0, 0]
   rotation: [3.14159265359, 0, 1.57079632679]

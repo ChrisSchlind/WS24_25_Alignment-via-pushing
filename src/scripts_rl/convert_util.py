@@ -114,6 +114,14 @@ def convert_to_orthographic(observations, workspace_bounds, projection_resolutio
                                             projection_resolution, 
                                             workspace_bounds)
 
+    # mirror arround y axis
+    heightmap = np.flipud(heightmap)
+    colormap = np.flipud(colormap)
+    
+    # rotate -90 degrees    
+    heightmap = np.rot90(heightmap, -1)    
+    colormap = np.rot90(colormap, -1)
+    
     return heightmap, colormap
 
 def display_orthographic(heightmap, colormap, workspace_bounds):
@@ -127,5 +135,8 @@ def display_orthographic(heightmap, colormap, workspace_bounds):
     else:
         normalized_heightmap = np.zeros_like(heightmap)
 
+    # Convert to rgb from bgr
+    colormap = cv2.cvtColor(colormap, cv2.COLOR_BGR2RGB)
+    
     cv2.imshow('Heightmap', heightmap)
     cv2.imshow('Colormap', colormap)         

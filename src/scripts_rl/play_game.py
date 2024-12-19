@@ -10,6 +10,7 @@ import random
 
 from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
+from convert_util import convert_to_orthographic, display_orthographic
 
 
 @hydra.main(version_base=None, config_path="config", config_name="play_game")
@@ -93,8 +94,14 @@ def main(cfg: DictConfig) -> None:
         # rescale for visualization
         depth_copy = depth_copy / 2.0
         cv2.imshow("depth", depth_copy)
+        
+        # Convert observations to orthographic view
+        height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
+        # Display orthographic view
+        display_orthographic(height_map, colormap, cfg.workspace_bounds)
+        
         key_pressed = cv2.waitKey(0)
-
+        
         if cfg.auto_mode:
             # Move robot
             z_offset = Affine([0, 0, 0.05])
