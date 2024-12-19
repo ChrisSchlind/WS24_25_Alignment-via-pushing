@@ -32,7 +32,7 @@ def main(cfg: DictConfig) -> None:
 
     robot.home()
     task = task_factory.create_task()
-    task.setup(env)    
+    task.setup(env)
 
     # randomly select an object and area
     id = random.randint(0, len(task.push_objects) - 1)
@@ -47,7 +47,7 @@ def main(cfg: DictConfig) -> None:
 
     # Move robot to start position
     gripper_offset = Affine(cfg.gripper_offset.translation, cfg.gripper_offset.rotation)
-    start_pose = Affine(translation=[0.35, -0.25, 0.004], rotation=[0, 0, 0, 1])
+    start_pose = Affine(translation=[0.35, -0.25, cfg.fixed_z_height], rotation=[0, 0, 0, 1])
     start_pose = start_pose * gripper_offset
     robot.ptp(start_pose)
 
@@ -76,6 +76,13 @@ def main(cfg: DictConfig) -> None:
     logger.info("Movement control is relative to the camera view displayed in the opencv window")
 
     while key_pressed != ord("q"):
+        # Drive robot to fixed height and vertical stick alignment
+        # current_pose = robot.get_eef_pose()
+        # corrected_pose = Affine(translation=[current_pose.translation[0], current_pose.translation[1], cfg.fixed_z_height], rotation=[0, 0, 0, 1])
+        # corrected_pose = corrected_pose * gripper_offset
+        # robot.ptp(corrected_pose)
+
+        # Update observation window
         observations = [camera.get_observation() for camera in camera_factory.cameras]
         # Display
         image_copy = copy.deepcopy(observations[0]["rgb"])
@@ -93,6 +100,11 @@ def main(cfg: DictConfig) -> None:
             z_offset = Affine([0, 0, 0.05])
             start_action = obj_pose * z_offset * gripper_offset
             end_action = area_pose * z_offset * gripper_offset
+
+            # Define fixed z height
+            start_action = Affine(translation=[start_action.translation[0], start_action.translation[1], cfg.fixed_z_height]) * gripper_offset
+            end_action = Affine(translation=[end_action.translation[0], end_action.translation[1], cfg.fixed_z_height]) * gripper_offset
+
             robot.ptp(start_action)
             robot.lin(end_action)
         else:
@@ -100,7 +112,11 @@ def main(cfg: DictConfig) -> None:
             action = switch.get(key_pressed, None)
             if action:
                 new_pose = current_pose * action
-                logger.info(f"Moving robot to {new_pose.translation}")
+
+                # Drive robot to fixed height and vertical stick alignment
+                new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], cfg.fixed_z_height]) * gripper_offset
+
+                logger.info(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
                 robot.ptp(new_pose)
                 logger.info("Robot movement completed")
 
@@ -108,8 +124,7 @@ def main(cfg: DictConfig) -> None:
             robot.ptp(start_pose)
             task.reset_env(env)
             logger.info("Environment reset completed")
-                      
-        
+
     # Shut down
     task.clean(env)
     logger.info("Task cleanup completed")

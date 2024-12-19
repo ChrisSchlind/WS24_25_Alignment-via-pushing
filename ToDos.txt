@@ -6,15 +6,25 @@
 
 ## Priority 2
 - JupyterNotebooks von Gergely studieren (RL), verstehen sodass dann grob ne Ahnung
-- "End-Game" Mathe einfügen, wenn Objekt und Area gut genug überlappen
-    -> Idee: In Orthografischer Projektion: Overlap-Ratio Obj/Area berechnen, Overlap-Ratio Obj/Tisch berechnen, und Threshold definieren
+
+- Orthografische Projektion RGBD normiern oder so?
+
+- Orthografische Projektion testen mit Zylinder im TCP, ob das noch klappt
+
+- Conv. DQN einfach mal in ner neuen datei reinkopieren, und anpassen (s. ipyn 4_DQN_gridworld.ipynb in Mitte)
+    -> In: RGB D = Orthografische Projektion (s. test_env)
+    -> Out: dX, dY je [0;1], die dann noch mit Workspace bounds skaliert werden müssen 
 
 
 ## Priority 3
-- Checken, ob TCP perfekt senkrecht & nicht driftet
+- "End-Game" Mathe einfügen, wenn Objekt und Area gut genug überlappen
+    -> Idee: In Orthografischer Projektion: Overlap-Ratio Obj/Area berechnen, Overlap-Ratio Obj/Tisch berechnen, und Threshold definieren
 
+- Orthografische Projektion zu greyscale + D?
 
 ## Priority 4 (optional)
+- Limit TCP or Obj. position to workspace boundaries / policy?!? -> zu Überlegen
+
 
 
 --------------------------------------------------------------------------------------------------------
@@ -23,5 +33,6 @@
 - Unser environment (alles wo grasp draufsteht, löschen) säubern
 - Ein einziges Dockerfile erstellen, das auf TF base besteht, und trotzdem alles von pybullet kann/hat
 - Masse, Reibung und Trägheitstensoren anpassen
+- Checken, ob TCP perfekt senkrecht & nicht driftet - fixed
 
 
