@@ -15,6 +15,7 @@ class TeletentricCamera(BulletCamera):
         pose_matrix = Affine(translation=[t_center[0], t_center[1], height], rotation=rotation).matrix
         super().__init__(bullet_client, pose_matrix, resolution, intrinsics, depth_range, record_depth)
         self.orthographic_bounds = orthographic_bounds
+        self.record_depth = True  # Ensure record_depth is set to True
 
     def compute_projection_matrix(self):
         # Override to create an orthographic projection matrix
@@ -41,8 +42,8 @@ class TeletentricCamera(BulletCamera):
         observation = {"rgb": color, "extrinsics": self.pose.matrix, "intrinsics": np.reshape(self.intrinsics, (3, 3)).astype(np.float32)}
         if self.record_depth:
             depth_buffer_opengl = np.reshape(depth, [self.resolution[1], self.resolution[0]])
-            depth_opengl = (
-                self.depth_range[1] * self.depth_range[0] / (self.depth_range[1] - (self.depth_range[1] - self.depth_range[0]) * depth_buffer_opengl)
-            )
+            depth_opengl = self.depth_range[1] * self.depth_range[0] / (self.depth_range[1] - (self.depth_range[1] - self.depth_range[0]) * depth_buffer_opengl)
             observation["depth"] = depth_opengl
+            # Debug: Print depth data statistics
+            print(f"Depth data min: {depth_opengl.min()}, max: {depth_opengl.max()}, mean: {depth_opengl.mean()}")
         return observation

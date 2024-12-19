@@ -7,6 +7,7 @@ from hydra.utils import instantiate
 import copy
 import cv2
 import random
+import matplotlib.pyplot as plt  # Import matplotlib for plotting
 
 from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
@@ -39,8 +40,17 @@ def update_observation_window(camera_factory, teletentric_camera, cfg, bullet_cl
 
     # Display teletentric camera view
     teletentric_observation = teletentric_camera.get_observation()
-    teletentric_image = cv2.cvtColor(teletentric_observation["rgb"], cv2.COLOR_BGR2RGB)
-    cv2.imshow("teletentric_rgb", teletentric_image)
+    teletentric_image_rgb = cv2.cvtColor(teletentric_observation["rgb"], cv2.COLOR_BGR2RGB)
+    cv2.imshow("teletentric_rgb", teletentric_image_rgb)
+
+    # Display height map from teletentric view
+    if "depth" in teletentric_observation:
+        teletentric_image_depth = teletentric_observation["depth"]
+        # Normalize depth for visualization
+        depth_normalized = cv2.normalize(teletentric_image_depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        # Apply histogram equalization for better contrast
+        depth_equalized = cv2.equalizeHist(depth_normalized)
+        cv2.imshow("teletentric_heightmap", depth_equalized)
 
 
 @hydra.main(version_base=None, config_path="config", config_name="play_game")
@@ -109,7 +119,7 @@ def main(cfg: DictConfig) -> None:
     logger.info("Movement control is relative to the camera view displayed in the opencv window")
 
     while key_pressed != ord("q"):
-        # Continuously update the observation window until a key is pressed
+        # Continuously update the camera-feed. This is because robot mvt is not instantaneous
         while True:
             update_observation_window(camera_factory, teletentric_camera, cfg, bullet_client)
             key_pressed = cv2.waitKey(1)
