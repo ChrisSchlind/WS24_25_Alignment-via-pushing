@@ -1,5 +1,5 @@
 _target_: bullet_env.teletentric_camera.TeletentricCamera
-height: 0.5
+height: 0.2
 resolution: [500, 500]
 intrinsics:
   - 642.730
@@ -15,3 +15,8 @@ depth_range:
   - 0.1
   - 50.0
 record_depth: true
+orthographic_bounds:
+  left: -0.5
+  right: 0.5
+  bottom: -0.5
+  top: 0.5

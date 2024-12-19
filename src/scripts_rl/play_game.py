@@ -86,12 +86,6 @@ def main(cfg: DictConfig) -> None:
     logger.info("Movement control is relative to the camera view displayed in the opencv window")
 
     while key_pressed != ord("q"):
-        # Drive robot to fixed height and vertical stick alignment
-        # current_pose = robot.get_eef_pose()
-        # corrected_pose = Affine(translation=[current_pose.translation[0], current_pose.translation[1], cfg.fixed_z_height], rotation=[0, 0, 0, 1])
-        # corrected_pose = corrected_pose * gripper_offset
-        # robot.ptp(corrected_pose)
-
         # Update observation window
         observations = [camera.get_observation() for camera in camera_factory.cameras]
         # Display
