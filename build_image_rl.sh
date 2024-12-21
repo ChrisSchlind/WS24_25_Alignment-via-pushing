@@ -8,5 +8,5 @@ docker build \
   --build-arg TENSORFLOW_VERSION="$tensorflow_version" \
   --build-arg UID="$uid" \
   --build-arg GID="$gid" \
-  -f tf.Dockerfile \
-  -t ws2425_avp/tf:"$tensorflow_version" .
+  -f rl.Dockerfile \
+  -t ws2425_avp/rl:"$tensorflow_version" .

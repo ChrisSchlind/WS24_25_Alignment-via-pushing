@@ -37,6 +37,8 @@ def main(cfg: DictConfig) -> None:
 
         if cfg.debug:
             image_copy = copy.deepcopy(observations[0]["rgb"])
+            # Convert to rgb for visualization
+            image_copy = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
             cv2.imshow("rgb", image_copy)
             depth_copy = copy.deepcopy(observations[0]["depth"])
             # rescale for visualization
@@ -49,7 +51,7 @@ def main(cfg: DictConfig) -> None:
             display_orthographic(height_map, colormap, cfg.workspace_bounds)
 
             pressed_key = cv2.waitKey(0)
-            if pressed_key == ord('q'):
+            if pressed_key == ord("q"):
                 break
 
         task.clean(env)

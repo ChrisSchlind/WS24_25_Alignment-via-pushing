@@ -208,3 +208,7 @@ class PushTask:
             env.remove_object(o.unique_id)
         for a in self.push_areas:
             env.remove_area(a.unique_id)
+
+    def reset_env(self, env):
+        self.clean(env)
+        self.setup(env)
