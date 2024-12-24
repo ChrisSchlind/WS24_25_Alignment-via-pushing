@@ -1,0 +1,60 @@
+defaults:
+  - defaults
+  - task_factory: simple_push_task
+  - camera_factory: static
+  - teletentric_camera: ../teletentric_camera_config
+  - _self_
+
+debug: true
+render: true
+auto_mode: false
+
+projection_resolution: [512, 512]
+
+# Gripper configuration  
+gripper_offset:
+  translation: [0, 0, 0]
+  rotation: [3.14159265359, 0, 1.57079632679]
+
+fixed_z_height: 0.005
+
+# Workspace bounds (in meters)
+workspace_bounds:
+  - [0.35, 0.85]   # x bounds
+  - [-0.25, 0.25]  # y bounds
+  - [-0.0125, 0.35] # z bounds
+
+
+# Training parameters
+num_episodes: 5    #10000
+max_steps_per_episode: 200
+batch_size: 16
+target_update_freq: 100
+save_freq: 100
+
+# Model parameters
+model_dir: "models/dqn"
+model_path: "models/dqn/dqn_episode_final"
+
+# Testing parameters
+num_test_episodes: 10
+render_delay: 50  # milliseconds between frames
+
+
+# Camera settings
+camera:
+  image_size: [84, 84]  # Standard size for DQN input
+  orthographic: true
+
+# Environment settings
+env:
+  _target_: bullet_env.pushing_env.PushingEnv  # Make sure this points to PushingEnv
+  bullet_client: ${bullet_client}
+  robot: ${robot}
+  task_factory: ${task_factory}
+  teletentric_camera: ${teletentric_camera}
+  workspace_bounds: ${workspace_bounds}
+  success_threshold: 0.05
+  max_steps: 200
+  coordinate_axes_urdf_path: null
+

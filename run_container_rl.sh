@@ -1,6 +1,13 @@
 #!/bin/bash
 
 tensorflow_version="2.11.0"
+image_name="ws2425_avp/rl:${tensorflow_version}"
+
+# Check if image exists
+if ! docker image inspect "$image_name" >/dev/null 2>&1; then
+    echo "Image not found. Building..."
+    ./build_image_rl.sh
+fi
 
 # Define container and host directories
 SRC_CONTAINER=/home/jovyan/workspace/src
@@ -29,3 +36,4 @@ docker run \
 
 # Revoke permissions after the container stops
 xhost -local:docker
+

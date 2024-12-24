@@ -2,12 +2,10 @@
 #                                           ToDo List
 --------------------------------------------------------------------------------------------------------
 ## Priority 1 (sehr hoch)
-- Syntetische Orthografische Projektion für schnelleres Trainiern, basierend auf camera/bullet-bib. in convert_util.py einfügen (RGBD, also 4 Channel), TCP Kreis soll auch in grau drin sein
+- Syntetische Orthografische Projektion verbessern (richtge mit 3 Kameras für real live, die telezentrische Kamera für schnelleres Training, beide sollten austauschbar sein)(RGBD, also 4 Channel), TCP Kreis soll auch in grau drin sein, muss eventuell auf der "schnellen telezentrischen" Version künstlich eingefügt werden
 
 
 ## Priority 2
-- JupyterNotebooks von Gergely studieren (RL), verstehen sodass dann grob ne Ahnung
-
 - Orthografische Projektion - Bildgröße gleich wie workspace bounds
 
 - Orthografische Projektion RGBD normiern oder so?
@@ -18,6 +16,7 @@
     -> In: RGB D = Orthografische Projektion (s. test_env)
     -> Out: dX, dY je [0;1], die dann noch mit Workspace bounds skaliert werden müssen 
 
+- GPU?
 
 
 ## Priority 3

@@ -42,8 +42,10 @@ class TeletentricCamera(BulletCamera):
         observation = {"rgb": color, "extrinsics": self.pose.matrix, "intrinsics": np.reshape(self.intrinsics, (3, 3)).astype(np.float32)}
         if self.record_depth:
             depth_buffer_opengl = np.reshape(depth, [self.resolution[1], self.resolution[0]])
-            depth_opengl = self.depth_range[1] * self.depth_range[0] / (self.depth_range[1] - (self.depth_range[1] - self.depth_range[0]) * depth_buffer_opengl)
+            depth_opengl = (
+                self.depth_range[1] * self.depth_range[0] / (self.depth_range[1] - (self.depth_range[1] - self.depth_range[0]) * depth_buffer_opengl)
+            )
             observation["depth"] = depth_opengl
             # Debug: Print depth data statistics
-            print(f"Depth data min: {depth_opengl.min()}, max: {depth_opengl.max()}, mean: {depth_opengl.mean()}")
+            # print(f"Depth data min: {depth_opengl.min()}, max: {depth_opengl.max()}, mean: {depth_opengl.mean()}")
         return observation
