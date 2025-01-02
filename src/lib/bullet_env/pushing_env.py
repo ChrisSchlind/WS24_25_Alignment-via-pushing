@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import copy
 from bullet_env.env import BulletEnv
 from transform.affine import Affine
 
@@ -18,6 +19,8 @@ class PushingEnv(BulletEnv):
         step_size,
         gripper_offset,
         fixed_z_height,
+        absolut_movement,
+        distance_reward_scale,
         success_threshold=0.05,
         max_steps=200,        
         coordinate_axes_urdf_path=None,
@@ -36,12 +39,19 @@ class PushingEnv(BulletEnv):
         self.gripper_offset = Affine(gripper_offset.translation, gripper_offset.rotation) #Affine([0, 0, 0], [3.14159265359, 0, 1.57079632679])
         self.fixed_z_height = fixed_z_height
         self.movement_punishment = False
+        self.absolut_movement = absolut_movement
+        self.distance_reward_scale = distance_reward_scale
+        self.dist_list = []
+        self.old_dist = []
+        self.old_eef_pos = None
 
     def reset(self):
         """Reset environment and return initial state"""
         # Clean up previous task if exists
         if self.current_task:
             self.current_task.clean(self)
+            self.dist_list = []
+            self.old_dist = []
 
         # Create new task and set up environment
         self.current_task = self.task_factory.create_task()
@@ -56,43 +66,69 @@ class PushingEnv(BulletEnv):
         # Reset step counter
         self.current_step = 0
 
+        # Create initial distance list
+        for i in range(len(self.current_task.push_objects)):
+            self.dist_list.append(0.0)
+            self.old_dist.append(0.0)
+
+        # Reset eef pose
+        self.old_eef_pos = self.robot.get_eef_pose().translation[:2]
+
         # Get initial observation
         return self._get_observation()
 
     def step(self, action):
         """Execute action and return (next_state, reward, done, info)"""
         self.current_step += 1
+
+        # Reset movement punishment flag
         self.movement_punishment = False
 
-        # Convert normalized action [-1,1] to workspace movement
-        x_range = self.workspace_bounds[0][1] - self.workspace_bounds[0][0]
-        y_range = self.workspace_bounds[1][1] - self.workspace_bounds[1][0]
+        if self.absolut_movement:
+            # Normalize action between [0,1]
+            action = (action + 1) / 2
 
-        x_move = action[0] * x_range * self.step_size
-        y_move = action[1] * y_range * self.step_size
+            # Convert normalized action [0,1] to movement bounds
+            x_range = self.movement_bounds[0][1] - self.movement_bounds[0][0]
+            y_range = self.movement_bounds[1][1] - self.movement_bounds[1][0]
 
-        logger.info(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
+            x_move = action[0] * x_range + self.movement_bounds[0][0]
+            y_move = action[1] * y_range + self.movement_bounds[1][0]
 
-        # Move robot
-        current_pose = self.robot.get_eef_pose()
-        new_pose = current_pose * Affine([x_move, y_move, 0])
+            logger.info(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
 
-        # Check if new pose is within movement bounds
-        if (
-            self.movement_bounds[0][0] <= new_pose.translation[0] <= self.movement_bounds[0][1]
-            and self.movement_bounds[1][0] <= new_pose.translation[1] <= self.movement_bounds[1][1]
-        ):
-            logger.info("New pose is within movement bounds.")
-        else:
-            logger.info("New pose is outside movement bounds.")
-            new_pose = current_pose  # Keep the current pose if the new pose is outside bounds
-            self.movement_punishment = True
+            # Move robot
+            new_pose = Affine([x_move, y_move, 0])
+
+        else: 
+            # Convert normalized action [-1,1] to workspace movement
+            x_range = self.workspace_bounds[0][1] - self.workspace_bounds[0][0]
+            y_range = self.workspace_bounds[1][1] - self.workspace_bounds[1][0]
+
+            x_move = action[0] * x_range * self.step_size
+            y_move = action[1] * y_range * self.step_size
+
+            logger.info(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
+
+            # Move robot
+            current_pose = self.robot.get_eef_pose()
+            new_pose = current_pose * Affine([x_move, y_move, 0])
+
+            # Check if new pose is within movement bounds
+            if (
+                self.movement_bounds[0][0] <= new_pose.translation[0] <= self.movement_bounds[0][1]
+                and self.movement_bounds[1][0] <= new_pose.translation[1] <= self.movement_bounds[1][1]
+            ):
+                logger.info("New pose is within movement bounds.")
+            else:
+                logger.info("New pose is outside movement bounds.")
+                new_pose = current_pose  # Keep the current pose if the new pose is outside bounds
+                self.movement_punishment = True
 
         # Maintain fixed height and orientation
         new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], self.fixed_z_height]) * self.gripper_offset
 
         logger.info(f"Moving to {new_pose.translation} with orientation {new_pose.quat} for action {action}")
-        logger.info(f"Current pose: {current_pose.translation} with orientation {current_pose.quat}")
 
         # Execute movement
         self.robot.ptp(new_pose)
@@ -139,8 +175,10 @@ class PushingEnv(BulletEnv):
     def _calculate_reward(self):
         """Calculate reward based on distance and orientation."""
         total_reward = 0
+        logger.info(f"Calculating reward for step {self.current_step}")
 
         for i in range(len(self.current_task.push_objects)):
+            # Current objects and areas
             obj, area = self.current_task.get_object_and_area_with_same_id(i)
             obj_pose = self.get_pose(obj.unique_id)
             area_pose = self.get_pose(area.unique_id)
@@ -148,23 +186,18 @@ class PushingEnv(BulletEnv):
             # Distance-based reward
             obj_pos = obj_pose.translation[:2]
             area_pos = area_pose.translation[:2]
-            dist = np.linalg.norm(obj_pos - area_pos)
-            total_reward -= dist  # negative distance to reduce it
-            if dist < self.success_threshold:
-                total_reward += 10.0
+            self.dist_list[i] = np.linalg.norm(obj_pos - area_pos)
 
-            # Orientation-based term as a placeholder for IoU:
-            obj_yaw = np.arctan2(
-                2.0 * (obj_pose.quat[3] * obj_pose.quat[2] + obj_pose.quat[0] * obj_pose.quat[1]),
-                1.0 - 2.0 * (obj_pose.quat[1] ** 2 + obj_pose.quat[2] ** 2),
-            )
-            area_yaw = np.arctan2(
-                2.0 * (area_pose.quat[3] * area_pose.quat[2] + area_pose.quat[0] * area_pose.quat[1]),
-                1.0 - 2.0 * (area_pose.quat[1] ** 2 + area_pose.quat[2] ** 2),
-            )
-            yaw_diff = abs(obj_yaw - area_yaw)
-            orientation_reward = 1.0 - min(yaw_diff / np.pi, 1.0)
-            total_reward += orientation_reward  # simple orientation reward
+            # Calculate reward based on distance between current and previous step
+            if self.current_step != 1: # Skip first step because there is no previous step
+                current_reward = round((self.old_dist[i] - self.dist_list[i]), 3) * self.distance_reward_scale
+                total_reward += current_reward
+                logger.info(f"Distance reward for object {i}: {current_reward}")
+
+            # placeholder for IoU
+
+        # Copy current distance list for next step    
+        self.old_dist = copy.deepcopy(self.dist_list)
 
         # Slight reward for being within workspace bounds
         eef_pos = self.robot.get_eef_pose().translation[:2]
@@ -172,28 +205,21 @@ class PushingEnv(BulletEnv):
             self.workspace_bounds[0][0] <= eef_pos[0] <= self.workspace_bounds[0][1]
             and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
         ):
-            total_reward += 0.5
+            total_reward += 5.0
             print("Positive reward given for being within workspace bounds.")
         
-        # Check for collision between end effector and push objects
-        for obj in self.current_task.push_objects:
-            contact_points = self.bullet_client.getContactPoints(self.robot.eef_id, obj.unique_id)
-            if contact_points:
-                total_reward += 0.1  # Positive reward for collision
-                logger.info(f"Collision detected between end effector and object {obj.unique_id}")
-
-        # Small reward for making contact with objects
-        for obj in self.current_task.push_objects:
-            obj_pos = self.get_pose(obj.unique_id).translation[:2]
-            if np.linalg.norm(eef_pos - obj_pos) < 0.07:  # Contact threshold, needs to be greater than maximum min_dist over all objects
-                                                            # plus radius of the psuh cylinder
-                total_reward += 0.05
-                print("Positive reward given for making contact with an object.") 
-
-        # Punish for moving outside movement bounds
+         # Punish for moving outside movement bounds
         if self.movement_punishment:
             total_reward -= 5.0
-            print("Negative reward given for moving outside movement bounds.")          
+            print("Negative reward given for moving outside movement bounds.")    
+
+        # Punishment for not moving
+        if np.linalg.norm(eef_pos - self.old_eef_pos) < 0.01 and self.current_step != 1:
+            total_reward -= 5.0
+            print("Negative reward given for not moving.")
+
+        # Update old eef position
+        self.old_eef_pos = copy.deepcopy(eef_pos)
 
         return total_reward
 

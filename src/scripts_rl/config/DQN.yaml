@@ -25,15 +25,21 @@ workspace_bounds:
 
 # Movement bounds (in meters)
 movement_bounds:
-  - [0.25, 0.95]  # x bounds
-  - [-0.35, 0.35]  # y bounds
+  - [0.2, 1.0]  # x bounds
+  - [-0.4, 0.4]  # y bounds
   - [-0.0125, 0.35]  # z bounds
 
 # Step size for the robot (in meters)
 step_size: 0.1
 
+# Movement condition
+absolut_movement: True
+
+# Reward
+distance_reward_scale: 100
+
 # Training parameters
-num_episodes: 10    #10000
+num_episodes: 500    #10000
 max_steps_per_episode: 200 #200
 batch_size: 16
 target_update_freq: 100
