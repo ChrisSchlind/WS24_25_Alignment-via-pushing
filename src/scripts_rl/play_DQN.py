@@ -53,7 +53,7 @@ def main(cfg: DictConfig) -> None:
             if done:
                 break
 
-        logger.info(f"Episode {episode}: Reward = {episode_reward}")
+            if(cfg.debug): logger.info(f"Episode {episode}: Reward = {episode_reward}")
 
     env.close()
 

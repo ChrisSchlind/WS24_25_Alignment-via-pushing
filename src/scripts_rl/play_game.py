@@ -71,7 +71,7 @@ def main(cfg: DictConfig) -> None:
     teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center, robot=robot)
     draw_camera_direction(bullet_client, teletentric_camera.pose)
 
-    logger.info("Instantiation completed.")
+    if(cfg.debug): logger.info("Instantiation completed.")
 
     robot.home()
     task = task_factory.create_task()
@@ -108,17 +108,17 @@ def main(cfg: DictConfig) -> None:
 
     # Control settings
     key_pressed = ord("w")
-    logger.info("Control settings:")
-    logger.info("w: move forward")
-    logger.info("s: move backward")
-    logger.info("a: move left")
-    logger.info("d: move right")
-    logger.info("e: move up")
-    logger.info("x: move down")
-    logger.info("r: reset environment")
-    logger.info("q: quit")
-    logger.info("Press any key to start")
-    logger.info("Movement control is relative to the camera view displayed in the opencv window")
+    if(cfg.debug): logger.info("Control settings:")
+    if(cfg.debug): logger.info("w: move forward")
+    if(cfg.debug): logger.info("s: move backward")
+    if(cfg.debug): logger.info("a: move left")
+    if(cfg.debug): logger.info("d: move right")
+    if(cfg.debug): logger.info("e: move up")
+    if(cfg.debug): logger.info("x: move down")
+    if(cfg.debug): logger.info("r: reset environment")
+    if(cfg.debug): logger.info("q: quit")
+    if(cfg.debug): logger.info("Press any key to start")
+    if(cfg.debug): logger.info("Movement control is relative to the camera view displayed in the opencv window")
 
     while key_pressed != ord("q"):
         # Continuously update the camera-feed. This is because robot mvt is not instantaneous
@@ -149,18 +149,18 @@ def main(cfg: DictConfig) -> None:
                 # Drive robot to fixed height and vertical stick alignment
                 new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], cfg.fixed_z_height]) * gripper_offset
 
-                logger.info(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
+                if(cfg.debug): logger.info(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
                 robot.ptp(new_pose)
-                logger.info("Robot movement completed")
+                if(cfg.debug): logger.info("Robot movement completed")
 
         if key_pressed == ord("r"):
             robot.ptp(start_pose)
             task.reset_env(env)
-            logger.info("Environment reset completed")
+            if(cfg.debug): logger.info("Environment reset completed")
 
     # Shut down
     task.clean(env)
-    logger.info("Task cleanup completed")
+    if(cfg.debug): logger.info("Task cleanup completed")
 
     with stdout_redirected():
         bullet_client.disconnect()

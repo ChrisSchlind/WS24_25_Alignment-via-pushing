@@ -27,7 +27,7 @@ def main(cfg: DictConfig) -> None:
     t_center = np.mean(t_bounds, axis=1)
     camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
 
-    logger.info("Instantiation completed.")
+    if(cfg.debug): logger.info("Instantiation completed.")
 
     for _ in range(10):
         robot.home()

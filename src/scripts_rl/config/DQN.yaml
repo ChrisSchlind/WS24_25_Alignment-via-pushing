@@ -5,7 +5,7 @@ defaults:
   - teletentric_camera: ../teletentric_camera_config
   - _self_
 
-debug: true
+debug: false
 render: true
 
 projection_resolution: [512, 512]
