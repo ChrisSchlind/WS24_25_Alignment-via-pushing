@@ -142,6 +142,8 @@ def main(cfg: DictConfig) -> None:
         step_size=cfg.step_size,
         gripper_offset=cfg.gripper_offset,
         fixed_z_height=cfg.fixed_z_height,
+        absolut_movement=cfg.absolut_movement,
+        distance_reward_scale=cfg.distance_reward_scale,
     )
 
     logger.info("Instantiation completed.")
