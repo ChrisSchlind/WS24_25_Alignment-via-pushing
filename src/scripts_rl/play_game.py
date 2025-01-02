@@ -94,6 +94,8 @@ def main(cfg: DictConfig) -> None:
     start_pose = start_pose * gripper_offset
     robot.ptp(start_pose)
 
+    update_observation_window(camera_factory, teletentric_camera, cfg, bullet_client)
+
     # Define Manual control
     switch = {
         ord("a"): Affine(translation=[-0.03, 0, 0]),

@@ -2,33 +2,27 @@
 #                                           ToDo List
 --------------------------------------------------------------------------------------------------------
 ## Priority 1 (sehr hoch)
-- Syntetische Orthografische Projektion verbessern (richtge mit 3 Kameras für real live, die telezentrische Kamera für schnelleres Training, beide sollten austauschbar sein)(RGBD, also 4 Channel), TCP Kreis soll auch in grau drin sein, muss eventuell auf der "schnellen telezentrischen" Version künstlich eingefügt werden
+
+- Reward: IOU nutzen anstelle von "Orientation-based term as a placeholder for IoU:"
+
+- Reward: Wenn Distanz zwischen Obj & Area vor und nach der Action sich ändert, gibt es einen reward 
+
 
 
 ## Priority 2
-- Orthografische Projektion - Bildgröße gleich wie workspace bounds
+- Netz-Gewichte zwischenspeichern & vorbereiten, dass bei späteren trainings darauf basiert aufgebaut werden kann?
 
-- Orthografische Projektion RGBD normiern oder so?
+- logger prints abhängig von "debug" machen mit STRG+F replace methode:    "logger.info("       ->      "if(self.debug == true): logger.info("
 
-- Orthografische Projektion testen mit Zylinder im TCP, ob das noch klappt
-
-- Conv. DQN einfach mal in ner neuen datei reinkopieren, und anpassen (s. ipyn 4_DQN_gridworld.ipynb in Mitte)
-    -> In: RGB D = Orthografische Projektion (s. test_env)
-    -> Out: dX, dY je [0;1], die dann noch mit Workspace bounds skaliert werden müssen 
-
-- GPU?
 
 
 ## Priority 3
-- "End-Game" Mathe einfügen, wenn Objekt und Area gut genug überlappen
-    -> Idee: In Orthografischer Projektion: Overlap-Ratio Obj/Area berechnen, Overlap-Ratio Obj/Tisch berechnen, und Threshold definieren
+- Graue und Schwarze Objekte abfangen, damit kein Problem mit "TCP grau" oder "Unterlagen-Schwarz"
 
-- Orthografische Projektion zu greyscale + D?
+
+
 
 ## Priority 4 (optional)
-- Limit TCP or Obj. position to workspace boundaries / policy?!? -> zu Überlegen
-
-- Graue und Schwarze Objekte abfangen, damit kein Problem mit "TCP grau" oder "Unterlagen-Schwarz"
 
 
 
