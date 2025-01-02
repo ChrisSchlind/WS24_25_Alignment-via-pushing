@@ -40,6 +40,10 @@ class PushObjectFactory:
         if "color" not in kwargs:
             kwargs["color"] = [random.random() for _ in range(3)] + [1.0]
 
+            # Check that color is not white or light gray
+            while np.linalg.norm(kwargs["color"]) > 2.5:
+                kwargs["color"] = [random.random() for _ in range(3)] + [1.0]
+
         return PushObject(**kwargs)
 
 

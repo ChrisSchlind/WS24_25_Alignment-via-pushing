@@ -2,11 +2,11 @@ _target_: bullet_env.teletentric_camera.TeletentricCamera
 height: 0.1
 resolution: [500, 500]
 intrinsics:
-  - 642.730
+  - 714.29 # 642.730
   - 0.0
   - 250.0
   - 0.0
-  - 642.730
+  - 714.29 # 642.730
   - 250.0
   - 0.0
   - 0.0
