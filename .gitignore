@@ -1,2 +1,5 @@
 *.pyc
 data/models/
+rl.Dockerfile
+build_image_rl.sh
+run_container_rl.sh
