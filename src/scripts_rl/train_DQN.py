@@ -55,9 +55,10 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, action_dim, epsilon=0.1, input_shape=(84, 84, 4)):
+    def __init__(self, action_dim, epsilon=0.1, gamma=0.99, input_shape=(84, 84, 4)):
         self.action_dim = action_dim
         self.epsilon = epsilon
+        self.gamma = gamma
         self.input_shape = input_shape
 
         # Create main and target networks
@@ -83,22 +84,25 @@ class DQNAgent:
         state = np.expand_dims(state, axis=0)
         # Direct continuous output from network
         action = self.model(state)[0].numpy()
+
         # Ensure actions are in [-1,1] range
         return np.clip(action, -1, 1)
 
-    def train(self, replay_buffer, batch_size=32, gamma=0.99):
+    def train(self, replay_buffer, batch_size=32):
         if replay_buffer.size() < batch_size:
             return
 
         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
 
-        next_q_values = self.target_model(next_states)
-        target_q = rewards + (1 - dones) * gamma * tf.reduce_max(next_q_values, axis=1)
+        targets = self.target_model(states).numpy()
+        next_value = np.max(self.target_model(next_states).numpy(), axis=1)
+        action_indices = np.argmax(actions, axis=1)
+        targets[range(actions.shape[0]), action_indices] = rewards + (1 - dones) * next_value * self.gamma
 
         with tf.GradientTape() as tape:
-            predicted_actions = self.model(states)
+            values = self.model(states)
             # MSE loss for continuous actions
-            loss = tf.reduce_mean(tf.square(actions - predicted_actions))
+            loss = tf.keras.metrics.mean_squared_error(targets, values) # changed actions - predicted_actions
 
         grads = tape.gradient(loss, self.model.trainable_variables)
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
@@ -124,8 +128,8 @@ def main(cfg: DictConfig) -> None:
     t_bounds[2, 1] = t_bounds[2, 0]
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
     t_center = np.mean(t_bounds, axis=1)
-    camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
-    teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center)
+    #camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
+    teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center, robot=robot)
 
     # Create environment with all components
     env = PushingEnv(
@@ -134,6 +138,10 @@ def main(cfg: DictConfig) -> None:
         task_factory=task_factory,
         teletentric_camera=teletentric_camera,
         workspace_bounds=cfg.workspace_bounds,
+        movement_bounds=cfg.movement_bounds,
+        step_size=cfg.step_size,
+        gripper_offset=cfg.gripper_offset,
+        fixed_z_height=cfg.fixed_z_height,
     )
 
     logger.info("Instantiation completed.")
@@ -178,6 +186,7 @@ def main(cfg: DictConfig) -> None:
             agent.model.save_weights(f"{cfg.model_dir}/dqn_episode_{episode}")
 
     env.close()
+    logger.info("Training completed.")
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@ def main(cfg: DictConfig) -> None:
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
     t_center = np.mean(t_bounds, axis=1)
     camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
-    teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center)
+    teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center, robot=robot)
     draw_camera_direction(bullet_client, teletentric_camera.pose)
 
     logger.info("Instantiation completed.")

@@ -7,7 +7,6 @@ defaults:
 
 debug: true
 render: true
-auto_mode: false
 
 projection_resolution: [512, 512]
 
@@ -24,10 +23,18 @@ workspace_bounds:
   - [-0.25, 0.25]  # y bounds
   - [-0.0125, 0.35] # z bounds
 
+# Movement bounds (in meters)
+movement_bounds:
+  - [0.25, 0.95]  # x bounds
+  - [-0.35, 0.35]  # y bounds
+  - [-0.0125, 0.35]  # z bounds
+
+# Step size for the robot (in meters)
+step_size: 0.1
 
 # Training parameters
-num_episodes: 5    #10000
-max_steps_per_episode: 200
+num_episodes: 10    #10000
+max_steps_per_episode: 200 #200
 batch_size: 16
 target_update_freq: 100
 save_freq: 100
@@ -39,7 +46,6 @@ model_path: "models/dqn/dqn_episode_final"
 # Testing parameters
 num_test_episodes: 10
 render_delay: 50  # milliseconds between frames
-
 
 # Camera settings
 camera:
@@ -54,6 +60,8 @@ env:
   task_factory: ${task_factory}
   teletentric_camera: ${teletentric_camera}
   workspace_bounds: ${workspace_bounds}
+  movement_bounds: ${movement_bounds}
+  step_size: 0.1
   success_threshold: 0.05
   max_steps: 200
   coordinate_axes_urdf_path: null

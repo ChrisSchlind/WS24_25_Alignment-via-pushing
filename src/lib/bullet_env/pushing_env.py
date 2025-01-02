@@ -3,6 +3,8 @@ import cv2
 from bullet_env.env import BulletEnv
 from transform.affine import Affine
 
+from loguru import logger
+
 
 class PushingEnv(BulletEnv):
     def __init__(
@@ -12,8 +14,12 @@ class PushingEnv(BulletEnv):
         task_factory,
         teletentric_camera,
         workspace_bounds,
+        movement_bounds,
+        step_size,
+        gripper_offset,
+        fixed_z_height,
         success_threshold=0.05,
-        max_steps=200,
+        max_steps=200,        
         coordinate_axes_urdf_path=None,
     ):
         super().__init__(bullet_client, coordinate_axes_urdf_path)
@@ -21,12 +27,15 @@ class PushingEnv(BulletEnv):
         self.task_factory = task_factory
         self.teletentric_camera = teletentric_camera
         self.workspace_bounds = workspace_bounds
+        self.movement_bounds = movement_bounds
+        self.step_size = step_size
         self.success_threshold = success_threshold
         self.max_steps = max_steps
         self.current_step = 0
         self.current_task = None
-        self.gripper_offset = Affine([0, 0, 0], [3.14159265359, 0, 1.57079632679])
-        self.fixed_z_height = 0.005
+        self.gripper_offset = Affine(gripper_offset.translation, gripper_offset.rotation) #Affine([0, 0, 0], [3.14159265359, 0, 1.57079632679])
+        self.fixed_z_height = fixed_z_height
+        self.movement_punishment = False
 
     def reset(self):
         """Reset environment and return initial state"""
@@ -53,20 +62,37 @@ class PushingEnv(BulletEnv):
     def step(self, action):
         """Execute action and return (next_state, reward, done, info)"""
         self.current_step += 1
+        self.movement_punishment = False
 
         # Convert normalized action [-1,1] to workspace movement
         x_range = self.workspace_bounds[0][1] - self.workspace_bounds[0][0]
         y_range = self.workspace_bounds[1][1] - self.workspace_bounds[1][0]
 
-        x_move = action[0] * x_range
-        y_move = action[1] * y_range
+        x_move = action[0] * x_range * self.step_size
+        y_move = action[1] * y_range * self.step_size
+
+        logger.info(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
 
         # Move robot
         current_pose = self.robot.get_eef_pose()
         new_pose = current_pose * Affine([x_move, y_move, 0])
 
+        # Check if new pose is within movement bounds
+        if (
+            self.movement_bounds[0][0] <= new_pose.translation[0] <= self.movement_bounds[0][1]
+            and self.movement_bounds[1][0] <= new_pose.translation[1] <= self.movement_bounds[1][1]
+        ):
+            logger.info("New pose is within movement bounds.")
+        else:
+            logger.info("New pose is outside movement bounds.")
+            new_pose = current_pose  # Keep the current pose if the new pose is outside bounds
+            self.movement_punishment = True
+
         # Maintain fixed height and orientation
         new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], self.fixed_z_height]) * self.gripper_offset
+
+        logger.info(f"Moving to {new_pose.translation} with orientation {new_pose.quat} for action {action}")
+        logger.info(f"Current pose: {current_pose.translation} with orientation {current_pose.quat}")
 
         # Execute movement
         self.robot.ptp(new_pose)
@@ -146,15 +172,28 @@ class PushingEnv(BulletEnv):
             self.workspace_bounds[0][0] <= eef_pos[0] <= self.workspace_bounds[0][1]
             and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
         ):
-            total_reward += 0.1
+            total_reward += 0.5
             print("Positive reward given for being within workspace bounds.")
+        
+        # Check for collision between end effector and push objects
+        for obj in self.current_task.push_objects:
+            contact_points = self.bullet_client.getContactPoints(self.robot.eef_id, obj.unique_id)
+            if contact_points:
+                total_reward += 0.1  # Positive reward for collision
+                logger.info(f"Collision detected between end effector and object {obj.unique_id}")
 
         # Small reward for making contact with objects
         for obj in self.current_task.push_objects:
             obj_pos = self.get_pose(obj.unique_id).translation[:2]
-            if np.linalg.norm(eef_pos - obj_pos) < 0.05:  # Contact threshold
+            if np.linalg.norm(eef_pos - obj_pos) < 0.07:  # Contact threshold, needs to be greater than maximum min_dist over all objects
+                                                            # plus radius of the psuh cylinder
                 total_reward += 0.05
-                print("Positive reward given for making contact with an object.")
+                print("Positive reward given for making contact with an object.") 
+
+        # Punish for moving outside movement bounds
+        if self.movement_punishment:
+            total_reward -= 5.0
+            print("Negative reward given for moving outside movement bounds.")          
 
         return total_reward
 
@@ -179,3 +218,8 @@ class PushingEnv(BulletEnv):
     def render(self):
         """Return the current camera view"""
         return self._get_observation()
+    
+    def close(self):
+        """Close the environment"""
+        self.bullet_client.disconnect()
+        logger.info("Environment closed.")
