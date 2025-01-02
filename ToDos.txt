@@ -14,12 +14,14 @@
 
 - logger prints abhängig von "debug" machen mit STRG+F replace methode:    "logger.info("       ->      "if(self.debug == true): logger.info("
 
+- Beim Modelle zwischenspeichern aufpassen, dass man nichts gute alte Netze nicht überschrieben werden, vllt beim normalen Speichern jeweils mit Uhrzeit/Tag-Namen-Ordner arbeiten, und dann einen "Best"-Ordner pflegen
+
 
 
 ## Priority 3
 - Graue und Schwarze Objekte abfangen, damit kein Problem mit "TCP grau" oder "Unterlagen-Schwarz"
 
-
+- Multi-Simulation? (mehrere environments gleichzeitig laufen lassen und Buffer füttern?)
 
 
 ## Priority 4 (optional)

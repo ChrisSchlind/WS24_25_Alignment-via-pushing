@@ -18,7 +18,8 @@ DATA_HOST="$(pwd)/data"
 # Allow local connections to the X server
 xhost +local:docker
 
-# Run the Docker container
+# Run the Docker container 
+# ==> for GPU support add "--gpus all" after "-e..."  <--------------------------------------------- GPU  JA / NEIN   !!!!!!!!!!!!!!!!!!!
 docker run \
   --name ws2425_avp-rl \
   --privileged \
