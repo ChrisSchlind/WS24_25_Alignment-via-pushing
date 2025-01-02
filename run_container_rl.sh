@@ -32,6 +32,7 @@ docker run \
   -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
   -e XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
   -e PULSE_SERVER=$PULSE_SERVER \
+  --gpus all \
   ws2425_avp/rl:"$tensorflow_version"
 
 # Revoke permissions after the container stops

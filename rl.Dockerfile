@@ -4,8 +4,8 @@
 ARG TENSORFLOW_VERSION=2.11.0
 
 # CPU or GPU:
-FROM tensorflow/tensorflow:${TENSORFLOW_VERSION}
-# FROM tensorflow/tensorflow:$TENSORFLOW_VERSION-gpu AS base
+#FROM tensorflow/tensorflow:${TENSORFLOW_VERSION}
+FROM tensorflow/tensorflow:$TENSORFLOW_VERSION-gpu AS tf-base
 
 USER root
 ENV TZ=Europe/Berlin
@@ -14,6 +14,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 ##############################################################################
 ##                           System Dependencies                            ##
 ##############################################################################
+FROM tf-base as tf-dependencies
+USER root
+
 RUN apt update \
   && apt install -y -qq --no-install-recommends \
   libglvnd0 \
@@ -37,10 +40,16 @@ RUN apt update \
 ##############################################################################
 ##                                User Setup                                ##
 ##############################################################################
+FROM tf-dependencies as tf-user
+
+# install sudo
+RUN apt-get update && apt-get install -y sudo
+
 ARG USER=jovyan
 ARG PASSWORD=automaton
 ARG UID=1000
 ARG GID=1000
+ENV USER=$USER
 
 RUN groupadd -g $GID $USER \
   && useradd -m -u $UID -g $GID -p "$(openssl passwd -1 $PASSWORD)" \
@@ -53,6 +62,8 @@ RUN mkdir -p /home/$USER/workspace/src /home/$USER/data
 ##############################################################################
 ##                           Python Dependencies                            ##
 ##############################################################################
+FROM tf-user as dependencies
+
 RUN /usr/bin/python3 -m pip install --upgrade pip
 
 # Combined dependencies from both files
