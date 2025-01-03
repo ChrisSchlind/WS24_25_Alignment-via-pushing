@@ -5,6 +5,8 @@ defaults:
   - teletentric_camera: ../teletentric_camera_config
   - _self_
 
+log_level: DEBUG # INFO, DEBUG, WARN, ERROR
+
 debug: true
 render: true
 
@@ -39,7 +41,7 @@ absolut_movement: True
 distance_reward_scale: 100
 
 # Training parameters
-num_envs: 1
+num_envs: 2
 num_episodes: 500    #10000
 max_steps_per_episode: 200 #200
 batch_size: 16

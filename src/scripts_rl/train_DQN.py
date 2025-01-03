@@ -147,15 +147,15 @@ def main(cfg: DictConfig) -> None:
         distance_reward_scale=cfg.distance_reward_scale,
     )
 
-    if(cfg.debug): logger.info("Instantiation completed.")
+    logger.info("Instantiation completed.")
 
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
     input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
     agent = DQNAgent(action_dim, input_shape=input_shape)
-    if(cfg.debug): logger.info("DQN agent initialized.")
+    logger.info("DQN agent initialized.")
     replay_buffer = ReplayBuffer()
-    if(cfg.debug): logger.info("Replay buffer initialized.")
+    logger.info("Replay buffer initialized.")
 
     # Training loop
     for episode in range(cfg.num_episodes):
@@ -182,14 +182,14 @@ def main(cfg: DictConfig) -> None:
             if done:
                 break
 
-        if(cfg.debug): logger.info(f"Episode {episode}: Reward = {episode_reward}")
+        logger.debug(f"Episode {episode}: Reward = {episode_reward}")
 
         # Save model periodically
         if episode % cfg.save_freq == 0:
             agent.model.save_weights(f"{cfg.model_dir}/dqn_episode_{episode}")
 
     env.close()
-    if(cfg.debug): logger.info("Training completed.")
+    logger.info("Training completed.")
 
 
 if __name__ == "__main__":

@@ -108,17 +108,17 @@ def main(cfg: DictConfig) -> None:
 
     # Control settings
     key_pressed = ord("w")
-    if(cfg.debug): logger.info("Control settings:")
-    if(cfg.debug): logger.info("w: move forward")
-    if(cfg.debug): logger.info("s: move backward")
-    if(cfg.debug): logger.info("a: move left")
-    if(cfg.debug): logger.info("d: move right")
-    if(cfg.debug): logger.info("e: move up")
-    if(cfg.debug): logger.info("x: move down")
-    if(cfg.debug): logger.info("r: reset environment")
-    if(cfg.debug): logger.info("q: quit")
-    if(cfg.debug): logger.info("Press any key to start")
-    if(cfg.debug): logger.info("Movement control is relative to the camera view displayed in the opencv window")
+    logger.debug("Control settings:")
+    logger.debug("w: move forward")
+    logger.debug("s: move backward")
+    logger.debug("a: move left")
+    logger.debug("d: move right")
+    logger.debug("e: move up")
+    logger.debug("x: move down")
+    logger.debug("r: reset environment")
+    logger.debug("q: quit")
+    logger.debug("Press any key to start")
+    logger.debug("Movement control is relative to the camera view displayed in the opencv window")
 
     while key_pressed != ord("q"):
         # Continuously update the camera-feed. This is because robot mvt is not instantaneous
@@ -149,9 +149,9 @@ def main(cfg: DictConfig) -> None:
                 # Drive robot to fixed height and vertical stick alignment
                 new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], cfg.fixed_z_height]) * gripper_offset
 
-                if(cfg.debug): logger.info(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
+                if(cfg.debug): logger.debug(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
                 robot.ptp(new_pose)
-                if(cfg.debug): logger.info("Robot movement completed")
+                if(cfg.debug): logger.debug("Robot movement completed")
 
         if key_pressed == ord("r"):
             robot.ptp(start_pose)
