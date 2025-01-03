@@ -1,7 +1,12 @@
-*.pyc
-data/models/
-
-
 build_image_rl.sh
 run_container_rl.sh
 rl.Dockerfile
+
+*.pyc
+data/models/
+
+src/scripts_rl/models/dqn/*
+
+src/scripts_rl/models/dqn/
+
+src/scripts_rl/models/dqn

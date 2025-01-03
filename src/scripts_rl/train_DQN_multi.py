@@ -127,6 +127,7 @@ def worker(env_config, model_weights_queue, replay_queue, cfg):
         fixed_z_height=cfg.fixed_z_height,
         absolut_movement=cfg.absolut_movement,
         distance_reward_scale=cfg.distance_reward_scale,
+        iou_reward_scale=cfg.iou_reward_scale,  # Pass the parameter
     )
 
     state = env.reset()

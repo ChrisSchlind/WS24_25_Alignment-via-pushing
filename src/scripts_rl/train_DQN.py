@@ -102,7 +102,7 @@ class DQNAgent:
         with tf.GradientTape() as tape:
             values = self.model(states)
             # MSE loss for continuous actions
-            loss = tf.keras.metrics.mean_squared_error(targets, values) # changed actions - predicted_actions
+            loss = tf.keras.metrics.mean_squared_error(targets, values)  # changed actions - predicted_actions
 
         grads = tape.gradient(loss, self.model.trainable_variables)
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
@@ -128,12 +128,12 @@ def main(cfg: DictConfig) -> None:
     t_bounds[2, 1] = t_bounds[2, 0]
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
     t_center = np.mean(t_bounds, axis=1)
-    #camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
+    # camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
     teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center, robot=robot)
 
     # Create environment with all components
     env = PushingEnv(
-        debug = cfg.debug,
+        debug=cfg.debug,
         bullet_client=bullet_client,
         robot=robot,
         task_factory=task_factory,
@@ -145,6 +145,7 @@ def main(cfg: DictConfig) -> None:
         fixed_z_height=cfg.fixed_z_height,
         absolut_movement=cfg.absolut_movement,
         distance_reward_scale=cfg.distance_reward_scale,
+        iou_reward_scale=cfg.iou_reward_scale,  # Pass the parameter
     )
 
     logger.info("Instantiation completed.")
@@ -162,7 +163,10 @@ def main(cfg: DictConfig) -> None:
         state = env.reset()
         episode_reward = 0
 
-        for step in range(cfg.max_steps_per_episode):
+        # Adjust max steps per episode for the first few episodes to improve learning speed
+        max_steps = min(cfg.max_steps_per_episode, (episode + 1) * 10)
+
+        for step in range(max_steps):
             action = agent.get_action(state)
 
             # Get next state using environment's step function

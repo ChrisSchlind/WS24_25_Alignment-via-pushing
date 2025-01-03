@@ -58,6 +58,16 @@ class PushObject(SceneObject):
     push_config: List[Dict[str, Any]] = field(default_factory=lambda: [])
     color: List[float] = field(default_factory=lambda: [1.0, 0.0, 0.0, 1.0])
 
+    def get_mask(self, bullet_client):
+        """Generate a binary mask for the object."""
+        width, height, _, _, segmentation_mask = bullet_client.getCameraImage(84, 84)
+        mask = np.zeros((height, width), dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                if segmentation_mask[i, j] == self.unique_id:
+                    mask[i, j] = 1
+        return mask
+
 
 class PushAreaFactory:
     def __init__(self, areas_root: str, areas_types: Union[List[str], None] = None):

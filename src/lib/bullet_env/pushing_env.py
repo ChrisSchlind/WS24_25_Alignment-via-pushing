@@ -22,6 +22,7 @@ class PushingEnv(BulletEnv):
         fixed_z_height,
         absolut_movement,
         distance_reward_scale,
+        iou_reward_scale,  # Add this parameter
         success_threshold=0.05,
         max_steps=200,
         coordinate_axes_urdf_path=None,
@@ -42,8 +43,11 @@ class PushingEnv(BulletEnv):
         self.movement_punishment = False
         self.absolut_movement = absolut_movement
         self.distance_reward_scale = distance_reward_scale
+        self.iou_reward_scale = iou_reward_scale  # Initialize the attribute
         self.dist_list = []
         self.old_dist = []
+        self.iou_list = []
+        self.old_iou = []
         self.old_eef_pos = None
         self.debug = debug
 
@@ -54,6 +58,8 @@ class PushingEnv(BulletEnv):
             self.current_task.clean(self)
             self.dist_list = []
             self.old_dist = []
+            self.iou_list = []
+            self.old_iou = []
 
         # Create new task and set up environment
         self.current_task = self.task_factory.create_task()
@@ -68,10 +74,12 @@ class PushingEnv(BulletEnv):
         # Reset step counter
         self.current_step = 0
 
-        # Create initial distance list
+        # Create initial distance and IoU lists
         for i in range(len(self.current_task.push_objects)):
             self.dist_list.append(0.0)
             self.old_dist.append(0.0)
+            self.iou_list.append(0.0)
+            self.old_iou.append(0.0)
 
         # Reset eef pose
         self.old_eef_pos = self.robot.get_eef_pose().translation[:2]
@@ -194,10 +202,19 @@ class PushingEnv(BulletEnv):
                 total_reward += current_reward
                 logger.debug(f"Distance reward for object {i}: {current_reward}")
 
-            # placeholder for IoU
+            # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
+            if self.current_step != 1:
+                obj_mask = get_object_mask(self.bullet_client, obj.unique_id)
+                area_mask = get_object_mask(self.bullet_client, area.unique_id)
+                iou = self.calculate_iou(obj_mask, area_mask)
+                current_reward = round((iou - self.old_iou[i]), 3) * self.iou_reward_scale
+                total_reward += current_reward
+                logger.debug(f"IoU NOT WORKING YET reward for object {i}: {current_reward}")
+                self.iou_list[i] = iou
 
-        # Copy current distance list for next step
+        # Copy current distance and IoU lists for next step
         self.old_dist = copy.deepcopy(self.dist_list)
+        self.old_iou = copy.deepcopy(self.iou_list)
 
         # Slight reward for being within workspace bounds
         eef_pos = self.robot.get_eef_pose().translation[:2]
@@ -215,8 +232,8 @@ class PushingEnv(BulletEnv):
 
         # Punishment for not moving
         if np.linalg.norm(eef_pos - self.old_eef_pos) < 0.01 and self.current_step != 1:
-            total_reward -= 5.0
-            logger.debug("Negative reward -5.0 given for not moving.")
+            total_reward -= 1.0
+            logger.debug("Negative reward -1.0 given for not moving.")
 
         # Update old eef position
         self.old_eef_pos = copy.deepcopy(eef_pos)
@@ -249,3 +266,22 @@ class PushingEnv(BulletEnv):
         """Close the environment"""
         self.bullet_client.disconnect()
         logger.debug("Environment closed.")
+
+    def calculate_iou(self, mask1, mask2):
+        """Calculate Intersection over Union (IoU) between two binary masks."""
+        logger.debug(f"Calculating IoU between two masks of shape {mask1.shape} and {mask2.shape}")
+        intersection = np.logical_and(mask1, mask2).sum()
+        union = np.logical_or(mask1, mask2).sum()
+        iou = intersection / union if union != 0 else 0
+        return iou
+
+
+def get_object_mask(bullet_client, unique_id):
+    """Generate a binary mask for the object."""
+    width, height, _, _, segmentation_mask = bullet_client.getCameraImage(84, 84)
+    mask = np.zeros((height, width), dtype=np.uint8)
+    for i in range(height):
+        for j in range(width):
+            if segmentation_mask[i, j] == unique_id:
+                mask[i, j] = 1
+    return mask
