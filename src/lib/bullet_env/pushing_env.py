@@ -203,14 +203,13 @@ class PushingEnv(BulletEnv):
                 logger.debug(f"Distance reward for object {i}: {current_reward}")
 
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
-            # if self.current_step != 1:
-            #    obj_mask = get_object_mask(self.bullet_client, obj.unique_id)
-            #    area_mask = get_object_mask(self.bullet_client, area.unique_id)
-            #    iou = self.calculate_iou(obj_mask, area_mask)
-            #    current_reward = round((iou - self.old_iou[i]), 3) * self.iou_reward_scale
-            #    total_reward += current_reward
-            #    logger.debug(f"IoU NOT WORKING YET reward for object {i}: {current_reward}")
-            #    self.iou_list[i] = iou
+            if self.current_step != 1:
+                IOU = self.get_objects_intersection_volume(obj.unique_id, area.unique_id)
+                #relative_iou = IOU - self.old_iou[i]
+                absolute_iou = IOU                
+                total_reward += absolute_iou * self.iou_reward_scale
+                logger.debug(f"IoU reward for object {i}: {absolute_iou}")
+
 
         # Copy current distance and IoU lists for next step
         self.old_dist = copy.deepcopy(self.dist_list)

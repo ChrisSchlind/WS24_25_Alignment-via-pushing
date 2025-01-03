@@ -82,3 +82,22 @@ class BulletEnv:
     
     def get_link_index(self, body_id: int, link_name: str):
         return get_link_index(self.bullet_client, body_id, link_name)
+
+
+    def get_objects_intersection_volume(self, unique_id1: int, unique_id2: int):
+        # Get the AABB (Axis-Aligned Bounding Box) for both objects
+        aabb1 = self.bullet_client.getAABB(unique_id1)
+        aabb2 = self.bullet_client.getAABB(unique_id2)
+
+        # Calculate the intersection volume of the two AABBs
+        intersection_min = [max(aabb1[0][i], aabb2[0][i]) for i in range(3)]
+        intersection_max = [min(aabb1[1][i], aabb2[1][i]) for i in range(3)]
+
+        # Check if there is an intersection
+        if all(intersection_min[i] < intersection_max[i] for i in range(3)):
+            intersection_volume = 1
+            for i in range(3):
+                intersection_volume *= (intersection_max[i] - intersection_min[i])
+            return intersection_volume
+        else:
+            return 0
