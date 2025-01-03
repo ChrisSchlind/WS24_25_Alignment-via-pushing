@@ -23,9 +23,8 @@ class PushingEnv(BulletEnv):
         absolut_movement,
         distance_reward_scale,
         success_threshold=0.05,
-        max_steps=200,        
+        max_steps=200,
         coordinate_axes_urdf_path=None,
-        
     ):
         super().__init__(bullet_client, coordinate_axes_urdf_path)
         self.robot = robot
@@ -38,7 +37,7 @@ class PushingEnv(BulletEnv):
         self.max_steps = max_steps
         self.current_step = 0
         self.current_task = None
-        self.gripper_offset = Affine(gripper_offset.translation, gripper_offset.rotation) #Affine([0, 0, 0], [3.14159265359, 0, 1.57079632679])
+        self.gripper_offset = Affine(gripper_offset.translation, gripper_offset.rotation)  # Affine([0, 0, 0], [3.14159265359, 0, 1.57079632679])
         self.fixed_z_height = fixed_z_height
         self.movement_punishment = False
         self.absolut_movement = absolut_movement
@@ -47,7 +46,6 @@ class PushingEnv(BulletEnv):
         self.old_dist = []
         self.old_eef_pos = None
         self.debug = debug
-        
 
     def reset(self):
         """Reset environment and return initial state"""
@@ -99,12 +97,12 @@ class PushingEnv(BulletEnv):
             x_move = action[0] * x_range + self.movement_bounds[0][0]
             y_move = action[1] * y_range + self.movement_bounds[1][0]
 
-            if(self.debug): logger.info(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
+            logger.debug(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
 
             # Move robot
             new_pose = Affine([x_move, y_move, 0])
 
-        else: 
+        else:
             # Convert normalized action [-1,1] to workspace movement
             x_range = self.workspace_bounds[0][1] - self.workspace_bounds[0][0]
             y_range = self.workspace_bounds[1][1] - self.workspace_bounds[1][0]
@@ -112,7 +110,7 @@ class PushingEnv(BulletEnv):
             x_move = action[0] * x_range * self.step_size
             y_move = action[1] * y_range * self.step_size
 
-            if(self.debug): logger.info(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
+            logger.debug(f"Action: {action}, x_move: {x_move}, y_move: {y_move}")
 
             # Move robot
             current_pose = self.robot.get_eef_pose()
@@ -123,16 +121,14 @@ class PushingEnv(BulletEnv):
                 self.movement_bounds[0][0] <= new_pose.translation[0] <= self.movement_bounds[0][1]
                 and self.movement_bounds[1][0] <= new_pose.translation[1] <= self.movement_bounds[1][1]
             ):
-                if(self.debug): logger.info("New pose is within movement bounds.")
+                logger.debug("New pose is within movement bounds.")
             else:
-                if(self.debug): logger.info("New pose is outside movement bounds.")
+                logger.debug("New pose is outside movement bounds.")
                 new_pose = current_pose  # Keep the current pose if the new pose is outside bounds
                 self.movement_punishment = True
 
         # Maintain fixed height and orientation
         new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], self.fixed_z_height]) * self.gripper_offset
-
-        if(self.debug): logger.info(f"Moving to {new_pose.translation} with orientation {new_pose.quat} for action {action}")
 
         # Execute movement
         self.robot.ptp(new_pose)
@@ -179,7 +175,7 @@ class PushingEnv(BulletEnv):
     def _calculate_reward(self):
         """Calculate reward based on distance and orientation."""
         total_reward = 0
-        if(self.debug): logger.info(f"Calculating reward for step {self.current_step}")
+        logger.debug(f"Calculating reward for step {self.current_step}")
 
         for i in range(len(self.current_task.push_objects)):
             # Current objects and areas
@@ -193,14 +189,14 @@ class PushingEnv(BulletEnv):
             self.dist_list[i] = np.linalg.norm(obj_pos - area_pos)
 
             # Calculate reward based on distance between current and previous step
-            if self.current_step != 1: # Skip first step because there is no previous step
+            if self.current_step != 1:  # Skip first step because there is no previous step
                 current_reward = round((self.old_dist[i] - self.dist_list[i]), 3) * self.distance_reward_scale
                 total_reward += current_reward
-                if(self.debug): logger.info(f"Distance reward for object {i}: {current_reward}")
+                logger.debug(f"Distance reward for object {i}: {current_reward}")
 
             # placeholder for IoU
 
-        # Copy current distance list for next step    
+        # Copy current distance list for next step
         self.old_dist = copy.deepcopy(self.dist_list)
 
         # Slight reward for being within workspace bounds
@@ -210,17 +206,17 @@ class PushingEnv(BulletEnv):
             and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
         ):
             total_reward += 5.0
-            if(self.debug): logger.info("Positive reward given for being within workspace bounds.")
-        
-         # Punish for moving outside movement bounds
+            logger.debug("Positive reward given for being within workspace bounds.")
+
+        # Punish for moving outside movement bounds
         if self.movement_punishment:
             total_reward -= 5.0
-            if(self.debug): logger.info("Negative reward given for moving outside movement bounds.")    
+            logger.debug("Negative reward -5.0 given for moving outside movement bounds.")
 
         # Punishment for not moving
         if np.linalg.norm(eef_pos - self.old_eef_pos) < 0.01 and self.current_step != 1:
             total_reward -= 5.0
-            if(self.debug): logger.info("Negative reward given for not moving.")
+            logger.debug("Negative reward -5.0 given for not moving.")
 
         # Update old eef position
         self.old_eef_pos = copy.deepcopy(eef_pos)
@@ -248,8 +244,8 @@ class PushingEnv(BulletEnv):
     def render(self):
         """Return the current camera view"""
         return self._get_observation()
-    
+
     def close(self):
         """Close the environment"""
         self.bullet_client.disconnect()
-        if(self.debug): logger.info("Environment closed.")
+        logger.debug("Environment closed.")

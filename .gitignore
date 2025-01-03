@@ -1,8 +1,7 @@
 *.pyc
 data/models/
 
-# Docker / Dockerfile:
-rl.Dockerfile
+
 build_image_rl.sh
 run_container_rl.sh
-
+rl.Dockerfile

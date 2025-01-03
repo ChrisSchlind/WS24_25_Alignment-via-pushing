@@ -12,13 +12,14 @@ import hydra
 from bullet_env.util import setup_bullet_client
 from bullet_env.pushing_env import PushingEnv
 
+
 class ConvDQN(tf.keras.Model):
     def __init__(self, action_dim=2):
         super().__init__()
         self.conv1 = tf.keras.layers.Conv2D(16, 3, strides=2, activation="relu")
         self.conv2 = tf.keras.layers.Conv2D(32, 3, strides=2, activation="relu")
         self.flatten = tf.keras.layers.Flatten()
-        self.fc1 = tf.keras.layers.Dense(128, activation="relu")
+        self.fc1 = tf.keras.layers.Dense(128, activation="tanh")
         self.fc2 = tf.keras.layers.Dense(action_dim)
 
     def call(self, x):
@@ -28,6 +29,7 @@ class ConvDQN(tf.keras.Model):
         x = self.fc1(x)
         x = self.fc2(x)
         return tf.nn.tanh(x)
+
 
 class ReplayBuffer:
     def __init__(self, capacity=10000):
@@ -43,6 +45,7 @@ class ReplayBuffer:
 
     def size(self):
         return len(self.buffer)
+
 
 class DQNAgent:
     def __init__(self, action_dim, epsilon=0.1, gamma=0.99, input_shape=(84, 84, 4)):
@@ -62,12 +65,20 @@ class DQNAgent:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.00025)
 
     def get_action(self, state, training=True):
-        if training and np.random.random() < self.epsilon:
-            return np.random.uniform(-1, 1, self.action_dim)
+        if training and np.random.random() < self.epsilon:  # epsilon-greedy policy makes the agent explore the environment
+            random_action = np.random.uniform(-1, 1, self.action_dim)
+            logger.debug("!!Random action: {}", random_action)
+            return random_action
+
+        # State is 84x84x4, RGB D   with 255,255,255,1 so we need to normalize it
+        state[0] = state[0] / 255.0
+        state[1] = state[1] / 255.0
+        state[2] = state[2] / 255.0
 
         state = np.expand_dims(state, axis=0)
+
         action = self.model(state)[0].numpy()
-        return np.clip(action, -1, 1)
+        return action
 
     def train(self, replay_buffer, batch_size=32):
         if replay_buffer.size() < batch_size:
@@ -77,9 +88,7 @@ class DQNAgent:
 
         targets = self.target_model(states).numpy()
         next_value = np.max(self.target_model(next_states).numpy(), axis=1)
-        targets[np.arange(actions.shape[0]), np.argmax(actions, axis=1)] = (
-            rewards + (1 - dones) * next_value * self.gamma
-        )
+        targets[np.arange(actions.shape[0]), np.argmax(actions, axis=1)] = rewards + (1 - dones) * next_value * self.gamma
 
         with tf.GradientTape() as tape:
             values = self.model(states)
@@ -93,6 +102,7 @@ class DQNAgent:
 
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
+
 
 def worker(env_config, model_weights_queue, replay_queue, cfg):
     bullet_client = setup_bullet_client(env_config.render)
@@ -120,25 +130,27 @@ def worker(env_config, model_weights_queue, replay_queue, cfg):
     )
 
     state = env.reset()
-    model = ConvDQN(action_dim=2)
+    agent = DQNAgent(action_dim=2, input_shape=state.shape)
     # Make a dummy pass through the model to initialize its weights
     dummy_state = np.zeros((1,) + state.shape)  # Assuming state has shape (84, 84, 4)
-    model(dummy_state)  # This initializes the weights
+    agent.model(dummy_state)  # This initializes the weights
 
     while True:
         if not model_weights_queue.empty():
             model_weights = model_weights_queue.get()
-            model.set_weights(model_weights)  # Apply the model weights
+            agent.model.set_weights(model_weights)  # Apply the model weights
 
-        action = np.random.uniform(-1, 1, 2)  # action_dim=2 für 2-dimensionales Aktion
+        action = agent.get_action(state)  # Use the agent to select an action
         next_state, reward, done, _ = env.step(action)
         replay_queue.put((state, action, reward, next_state, done))
 
         if done:
             state = env.reset()
+            logger.debug("#################################################################################################")
+            logger.info("Episode done, resetting environment")
+            logger.debug("#################################################################################################")
         else:
             state = next_state
-
 
 
 def train_model(env_config, num_envs):
@@ -166,15 +178,18 @@ def train_model(env_config, num_envs):
         if episode % env_config.save_freq == 0:
             agent.model.save_weights(f"{env_config.model_dir}/dqn_episode_{episode}")
 
+        # Send updated weights to workers
         model_weights_queue.put(agent.model.get_weights())
 
     for p in processes:
         p.terminate()
         p.join()
 
+
 @hydra.main(version_base=None, config_path="config", config_name="DQN")
 def main(cfg: DictConfig):
     train_model(cfg, num_envs=cfg.num_envs)
+
 
 if __name__ == "__main__":
     main()

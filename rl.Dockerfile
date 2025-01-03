@@ -3,9 +3,9 @@
 ##############################################################################
 ARG TENSORFLOW_VERSION=2.11.0
 
-# CPU or GPU:
-#FROM tensorflow/tensorflow:${TENSORFLOW_VERSION} AS tf-base
-FROM tensorflow/tensorflow:$TENSORFLOW_VERSION-gpu AS tf-base
+# CPU or GPU:                                                       <--------------------------------------------- GPU  JA / NEIN   !!!!!!!!!!!!!!!!!!!
+FROM tensorflow/tensorflow:${TENSORFLOW_VERSION} AS tf-base
+#FROM tensorflow/tensorflow:$TENSORFLOW_VERSION-gpu AS tf-base
 
 USER root
 ENV TZ=Europe/Berlin
