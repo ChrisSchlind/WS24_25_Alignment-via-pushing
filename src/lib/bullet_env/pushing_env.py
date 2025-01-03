@@ -181,7 +181,7 @@ class PushingEnv(BulletEnv):
         return state
 
     def _calculate_reward(self):
-        """Calculate reward based on distance and orientation."""
+        """Calculate reward based on distance and iou."""
         total_reward = 0
         logger.debug(f"Calculating reward for step {self.current_step}")
 
@@ -203,14 +203,14 @@ class PushingEnv(BulletEnv):
                 logger.debug(f"Distance reward for object {i}: {current_reward}")
 
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
-            if self.current_step != 1:
-                obj_mask = get_object_mask(self.bullet_client, obj.unique_id)
-                area_mask = get_object_mask(self.bullet_client, area.unique_id)
-                iou = self.calculate_iou(obj_mask, area_mask)
-                current_reward = round((iou - self.old_iou[i]), 3) * self.iou_reward_scale
-                total_reward += current_reward
-                logger.debug(f"IoU NOT WORKING YET reward for object {i}: {current_reward}")
-                self.iou_list[i] = iou
+            # if self.current_step != 1:
+            #    obj_mask = get_object_mask(self.bullet_client, obj.unique_id)
+            #    area_mask = get_object_mask(self.bullet_client, area.unique_id)
+            #    iou = self.calculate_iou(obj_mask, area_mask)
+            #    current_reward = round((iou - self.old_iou[i]), 3) * self.iou_reward_scale
+            #    total_reward += current_reward
+            #    logger.debug(f"IoU NOT WORKING YET reward for object {i}: {current_reward}")
+            #    self.iou_list[i] = iou
 
         # Copy current distance and IoU lists for next step
         self.old_dist = copy.deepcopy(self.dist_list)
@@ -222,8 +222,8 @@ class PushingEnv(BulletEnv):
             self.workspace_bounds[0][0] <= eef_pos[0] <= self.workspace_bounds[0][1]
             and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
         ):
-            total_reward += 5.0
-            logger.debug("Positive reward given for being within workspace bounds.")
+            total_reward += 0.5
+            logger.debug("Positive reward +0.5 given for being within workspace bounds.")
 
         # Punish for moving outside movement bounds
         if self.movement_punishment:
