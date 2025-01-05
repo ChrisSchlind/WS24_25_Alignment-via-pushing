@@ -23,6 +23,7 @@ class PushingEnv(BulletEnv):
         absolut_movement,
         distance_reward_scale,
         iou_reward_scale,  # Add this parameter
+        no_movement_threshold,
         success_threshold=0.05,
         max_steps=200,
         coordinate_axes_urdf_path=None,
@@ -44,12 +45,14 @@ class PushingEnv(BulletEnv):
         self.absolut_movement = absolut_movement
         self.distance_reward_scale = distance_reward_scale
         self.iou_reward_scale = iou_reward_scale  # Initialize the attribute
+        self.no_movement_threshold = no_movement_threshold
         self.dist_list = []
         self.old_dist = []
         self.iou_list = []
         self.old_iou = []
         self.old_eef_pos = None
         self.debug = debug
+        
 
     def reset(self):
         """Reset environment and return initial state"""
@@ -161,6 +164,13 @@ class PushingEnv(BulletEnv):
         # Resize RGB image (500x500x3 -> 84x84x3)
         rgb = cv2.resize(obs["rgb"], (84, 84), interpolation=cv2.INTER_AREA)
 
+        # Normalize RGB values between [0,1]
+        rgb = rgb / 255.0
+
+        # Normalize RGB values between [-1, 1] (as required by DQN)
+        # result is better than without normalization but at the end the agent is not learning
+        #rgb = (rgb - 127.5) / 127.5
+
         # Resize and normalize depth image (500x500 -> 84x84)
         depth = obs["depth"]
         if len(depth.shape) == 3:
@@ -198,17 +208,22 @@ class PushingEnv(BulletEnv):
 
             # Calculate reward based on distance between current and previous step
             if self.current_step != 1:  # Skip first step because there is no previous step
-                current_reward = round((self.old_dist[i] - self.dist_list[i]), 3) * self.distance_reward_scale
-                total_reward += current_reward
-                logger.debug(f"Distance reward for object {i}: {current_reward}")
+                absolute_distance = round((self.old_dist[i] - self.dist_list[i]), 3)
+
+                if 0.1 < self.dist_list[i] < 0.3: # if the robot touches the object it gets a positive reward
+                    current_reward = abs(absolute_distance) * self.distance_reward_scale
+                else: # negative reward if the robot moves the obejct away from the area if the object is already near the area
+                    current_reward = absolute_distance * self.distance_reward_scale                
+                total_reward += round(current_reward, 2)
+                logger.debug(f"Distance reward for object {i}: {round(current_reward, 2)}")
 
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
             if self.current_step != 1:
                 IOU = self.get_objects_intersection_volume(obj.unique_id, area.unique_id)
                 #relative_iou = IOU - self.old_iou[i]
-                absolute_iou = IOU                
-                total_reward += absolute_iou * self.iou_reward_scale
-                logger.debug(f"IoU reward for object {i}: {absolute_iou}")
+                absolute_iou = IOU * 10e6 # scale IoU to be greater than 0.1, currently all IoU values are XXXXe-09
+                total_reward += round(absolute_iou * self.iou_reward_scale, 2)
+                logger.debug(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
 
 
         # Copy current distance and IoU lists for next step
@@ -221,18 +236,20 @@ class PushingEnv(BulletEnv):
             self.workspace_bounds[0][0] <= eef_pos[0] <= self.workspace_bounds[0][1]
             and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
         ):
-            total_reward += 0.5
-            logger.debug("Positive reward +0.5 given for being within workspace bounds.")
+            total_reward += 1.0
+            logger.debug("Positive reward +1.0 given for being within workspace bounds.")
 
         # Punish for moving outside movement bounds
         if self.movement_punishment:
-            total_reward -= 5.0
-            logger.debug("Negative reward -5.0 given for moving outside movement bounds.")
+            total_reward -= 10.0
+            logger.debug("Negative reward -10.0 given for moving outside movement bounds.")
 
         # Punishment for not moving
-        if np.linalg.norm(eef_pos - self.old_eef_pos) < 0.01 and self.current_step != 1:
-            total_reward -= 1.0
-            logger.debug("Negative reward -1.0 given for not moving.")
+        if np.linalg.norm(eef_pos - self.old_eef_pos) < self.no_movement_threshold and self.current_step != 1:
+            total_reward -= 10.0
+            logger.debug("Negative reward -10.0 given for not moving.")
+        # No positive reward for moving because than the robot will just move around without any purpose
+        
 
         # Update old eef position
         self.old_eef_pos = copy.deepcopy(eef_pos)

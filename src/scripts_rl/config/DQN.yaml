@@ -37,13 +37,16 @@ step_size: 0.1
 # Movement condition
 absolut_movement: True
 
+# Threshold for no movement
+no_movement_threshold: 0.02
+
 # Reward
-distance_reward_scale: 500
-iou_reward_scale: 1000
+distance_reward_scale: 300
+iou_reward_scale: 300
 
 # Training parameters
 num_envs: 1
-num_episodes: 2000    #10000
+num_episodes: 500    #10000
 max_steps_per_episode: 200 #200
 batch_size: 16
 target_update_freq: 100
@@ -52,6 +55,10 @@ save_freq: 100
 # Model parameters
 model_dir: "models/dqn"
 model_path: "models/dqn/dqn_episode_final"
+
+# Plotting parameters (reward and epsilon)
+plot_freq: 3
+plot_dir: "models/plot"
 
 # Testing parameters
 num_test_episodes: 10
