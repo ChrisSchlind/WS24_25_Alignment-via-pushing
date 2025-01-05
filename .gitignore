@@ -7,3 +7,6 @@ build_image_rl.sh
 run_container_rl.sh
 
 src/scripts_rl/models/dqn/
+
+# Image
+*.png
