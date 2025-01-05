@@ -112,8 +112,9 @@ class PushArea(SceneObject):
 
 
 class PushTaskFactory:
-    def __init__(self, n_objects: int, t_bounds, r_bounds=None, push_object_factory=None, push_area_factory=None):
+    def __init__(self, n_objects: int, min_n_objects: int, t_bounds, r_bounds=None, push_object_factory=None, push_area_factory=None):
         self.n_objects = n_objects
+        self.min_n_objects = min_n_objects
         self.t_bounds = np.array(t_bounds)
         self.r_bounds = np.array([[0, 0], [0, 0], [0, 2 * np.pi]]) if r_bounds is None else np.array(r_bounds)
         self.push_object_factory = push_object_factory
@@ -168,7 +169,7 @@ class PushTaskFactory:
 
     def create_task(self):
         self._reset_counters()
-        n_objects = np.random.randint(1, self.n_objects + 1)
+        n_objects = np.random.randint(self.min_n_objects, self.n_objects + 1)
         object_types = random.choices(self.push_object_factory.object_types, k=n_objects)
         push_objects = []
         push_areas = []
