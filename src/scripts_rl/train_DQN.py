@@ -37,33 +37,6 @@ class ConvDQN(tf.keras.Model):
         x = self.fc2(x)
         # Output in [-1,1]
         return tf.nn.tanh(x)
-
-
-class ReplayBuffer:
-    def __init__(self, capacity=10000):
-        self.buffer = deque(maxlen=capacity)
-
-    def put(self, state, action, reward, next_state, done):
-        self.buffer.append([state, action, reward, next_state, done])
-
-    def sample(self, batch_size, reward_range=(-1.0, 1.0)):
-        sample = random.sample(self.buffer, batch_size)
-        states, actions, rewards, next_states, dones = map(np.array, zip(*sample))
-
-        # Normalization of rewards
-        # Find the minimum and maximum of the rewards
-        reward_min = np.min(rewards)
-        reward_max = np.max(rewards)
-
-        # Normalize the rewards to the desired range
-        # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
-        reward_min_new, reward_max_new = reward_range
-        rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
-
-        return states, actions, rewards_normalized, next_states, dones
-
-    def size(self):
-        return len(self.buffer)
     
 class PrioritizedReplayBuffer:
     def __init__(self, capacity=10000, alpha=0.6):
@@ -92,21 +65,29 @@ class PrioritizedReplayBuffer:
         priorities = np.array(self.priorities)
         prob_dist = priorities / np.sum(priorities)
 
-        # Select experiences based on priorities
-        indices = np.random.choice(len(self.buffer), batch_size, p=prob_dist)
+        # Initialize the rewards
+        reward_min = 0
+        reward_max = 0
 
-        # Calculate Importance Sampling Weights
-        weights = (len(self.buffer) * prob_dist[indices]) ** (-beta)
-        weights /= weights.max()  # Normalize the weights
+        while (reward_min == 0 and reward_max == 0) or reward_min == reward_max: # Avoid division by zero, sample again
+            # Select experiences based on priorities
+            indices = np.random.choice(len(self.buffer), batch_size, p=prob_dist)
 
-        # Retrieve the sampled experiences and their priorities
-        samples = [self.buffer[idx] for idx in indices]
-        states, actions, rewards, next_states, dones = map(np.array, zip(*samples))
+            # Calculate Importance Sampling Weights
+            weights = (len(self.buffer) * prob_dist[indices]) ** (-beta)
+            weights /= weights.max()  # Normalize the weights
 
-        # Normalization of rewards
-        # Find the minimum and maximum of the rewards
-        reward_min = np.min(rewards)
-        reward_max = np.max(rewards)
+            # Retrieve the sampled experiences and their priorities
+            samples = [self.buffer[idx] for idx in indices]
+            states, actions, rewards, next_states, dones = map(np.array, zip(*samples))
+
+            # Normalization of rewards
+            # Find the minimum and maximum of the rewards
+            reward_min = np.min(rewards)
+            reward_max = np.max(rewards)
+
+            if (reward_min == 0 and reward_max == 0) or reward_min == reward_max:
+                logger.debug("Resampling due to zero rewards.")
 
         # Normalize the rewards to the desired range
         # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
@@ -128,7 +109,7 @@ class PrioritizedReplayBuffer:
         return len(self.buffer)
 
 class DQNAgent:
-    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9995, gamma=0.99, input_shape=(84, 84, 4)):
+    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4)):
         self.action_dim = action_dim
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
@@ -163,38 +144,6 @@ class DQNAgent:
 
         # Ensure actions are in [-1,1] range
         return np.clip(action, -1, 1)
-
-    def train(self, replay_buffer, batch_size=32):
-        # Check if the replay buffer is of the correct type
-        if not isinstance(replay_buffer, ReplayBuffer):
-            raise TypeError("The replay buffer used must be an instance of ReplayBuffer. Change replay_buffer in main from PrioritizedReplayBuffer to ReplayBuffer or use train_prioritized method.")
-
-        if replay_buffer.size() < batch_size:
-            return
-
-        states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size, reward_range=(-1.0, 1.0))
-
-        targets = self.target_model(states).numpy()
-        next_value = np.max(self.target_model(next_states).numpy(), axis=1)
-        action_indices = np.argmax(actions, axis=1)
-        targets[range(actions.shape[0]), action_indices] = rewards + (1 - dones) * next_value * self.gamma
-
-        with tf.GradientTape() as tape:
-            values = self.model(states)
-            # MSE loss for continuous actions
-            loss = tf.keras.losses.MSE(targets, values)  # changed actions - predicted_actions
-
-        logger.debug(f"Loss: {loss}")
-
-        grads = tape.gradient(loss, self.model.trainable_variables)
-        grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
-        self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
-
-        # Epsilon Annealing: Reduce epsilon after each training step
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
-
-        return loss.numpy()
     
     def train_prioritized(self, replay_buffer, batch_size=32, beta=0.4):
         # Check if the replay buffer is of the correct type
@@ -239,8 +188,8 @@ class DQNAgent:
         # Apply the Importance Sampling Weights
         weighted_loss = weights * loss  # TensorFlow computation, maintaining the gradient flow
 
-        logger.debug(f"Weights: {weights}")
-        logger.debug(f"Weighted Loss: {weighted_loss}")
+        #logger.debug(f"Weights: {weights}")
+        #logger.debug(f"Weighted Loss: {weighted_loss}")
 
         # Check if any gradients are None
         grads = tape.gradient(loss, self.model.trainable_variables)
@@ -307,7 +256,7 @@ def main(cfg: DictConfig) -> None:
     input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
     agent = DQNAgent(action_dim, input_shape=input_shape)
     logger.info("DQN agent initialized.")
-    replay_buffer = PrioritizedReplayBuffer() #PrioritizedReplayBuffer() #ReplayBuffer()
+    replay_buffer = PrioritizedReplayBuffer()
     logger.info("Replay buffer initialized.")
 
     # Initialize reward tracking
