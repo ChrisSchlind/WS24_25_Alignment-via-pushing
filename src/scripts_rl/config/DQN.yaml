@@ -54,7 +54,7 @@ save_freq: 100
 
 # Load pretrained model
 weights_dir: "models/best"
-weights_path: "dqn_epsiode_100"
+weights_path: "" # dqn_episode_100
 
 # Model parameters
 model_dir: "models/dqn"

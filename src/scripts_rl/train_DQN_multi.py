@@ -4,6 +4,7 @@ import multiprocessing as mp
 import numpy as np
 import tensorflow as tf
 import random
+import os
 from collections import deque
 from loguru import logger
 from omegaconf import DictConfig
@@ -11,6 +12,15 @@ from hydra.utils import instantiate
 import hydra
 from bullet_env.util import setup_bullet_client
 from bullet_env.pushing_env import PushingEnv
+
+# Initialize CUDA context
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
 
 # Define the Convolutional Deep Q-Network (DQN) model
 class ConvDQN(tf.keras.Model):
@@ -109,10 +119,12 @@ class DQNAgent:
 
         if weights_path:
             try:
-                self.model.load_weights(f"{weights_dir}/{weights_path}")
-                logger.debug(f"Loaded weights from {weights_dir}/{weights_path}")
+                weights_file_path = os.path.join(weights_dir, weights_path)
+                logger.debug(f"Final weights path: {weights_file_path}")
+                self.model.load_weights(weights_file_path)
+                logger.debug(f"Loaded weights from {weights_file_path}")
             except Exception as e:
-                logger.error(f"Error loading weights from {weights_dir}/{weights_path}: {e}")
+                logger.error(f"Error loading weights from {weights_file_path}: {e}")
         else:
             logger.debug("Starting model with random weights")
 
@@ -176,9 +188,9 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
 
 # Worker function to run the environment and collect experiences
-def worker(env_config, model_weights_queue, replay_queue, cfg, agent):
-    bullet_client = setup_bullet_client(env_config.render)
-    robot = instantiate(env_config.robot, bullet_client=bullet_client)
+def worker(cfg, model_weights_queue, replay_queue, agent):
+    bullet_client = setup_bullet_client(cfg.render)
+    robot = instantiate(cfg.robot, bullet_client=bullet_client)
     t_bounds = copy.deepcopy(robot.workspace_bounds)
     t_bounds[2, 1] = t_bounds[2, 0]
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
@@ -186,31 +198,33 @@ def worker(env_config, model_weights_queue, replay_queue, cfg, agent):
     teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center, robot=robot)
 
     env = PushingEnv(
-        debug=env_config.debug,
+        debug=cfg.debug,
         bullet_client=bullet_client,
         robot=robot,
         task_factory=task_factory,
         teletentric_camera=teletentric_camera,
-        workspace_bounds=env_config.workspace_bounds,
+        workspace_bounds=cfg.workspace_bounds,
         movement_bounds=cfg.movement_bounds,
         step_size=cfg.step_size,
         gripper_offset=cfg.gripper_offset,
         fixed_z_height=cfg.fixed_z_height,
         absolut_movement=cfg.absolut_movement,
         distance_reward_scale=cfg.distance_reward_scale,
-        iou_reward_scale=cfg.iou_reward_scale,  
+        iou_reward_scale=cfg.iou_reward_scale,  # Pass the parameter
+        no_movement_threshold=cfg.no_movement_threshold,
     )
 
     state = env.reset()
-    dummy_state = np.zeros((1,) + state.shape)  
-    agent.model(dummy_state)
+    logger.debug(f"Environment reset.")
 
+    logger.debug(f"Worker started!")
     while True:
         if not model_weights_queue.empty():
             model_weights = model_weights_queue.get()
             agent.model.set_weights(model_weights)
 
         action = agent.get_action(state)
+        logger.debug(f"Action: {action}")
         next_state, reward, done, _ = env.step(action)
         replay_queue.put((state, action, reward, next_state, done))
 
@@ -229,12 +243,14 @@ def train_model(env_config, num_envs):
     replay_buffer = PrioritizedReplayBuffer()
 
     agent = DQNAgent(action_dim=2, input_shape=(84, 84, 4), weights_path=env_config.weights_path, weights_dir=env_config.weights_dir)
+    logger.debug(f"Agent loaded.")
 
     processes = []
     for _ in range(num_envs):
         p = mp.Process(target=worker, args=(env_config, model_weights_queue, replay_queue, agent))
         p.start()
         processes.append(p)
+    logger.debug(f"Processes started.")
 
     for episode in range(env_config.num_episodes):
         while not replay_queue.empty():
@@ -247,7 +263,7 @@ def train_model(env_config, num_envs):
             agent.update_target()
 
         if episode % env_config.save_freq == 0:
-            agent.model.save_weights(f"{env_config.model_dir}/dqn_episode_{episode}")
+            agent.model.save_weights(f"{env_config.model_dir}/dqn_episode_{episode}", save_format="tf")
 
         model_weights_queue.put(agent.model.get_weights())
 
