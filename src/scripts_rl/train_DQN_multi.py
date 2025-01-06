@@ -104,7 +104,7 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
 
 
-def worker(env_config, model_weights_queue, replay_queue, cfg):
+def worker(env_config, model_weights_queue, replay_queue, cfg, agent):
     bullet_client = setup_bullet_client(env_config.render)
     robot = instantiate(env_config.robot, bullet_client=bullet_client)
     # Create task factory and other components first
@@ -131,7 +131,6 @@ def worker(env_config, model_weights_queue, replay_queue, cfg):
     )
 
     state = env.reset()
-    agent = DQNAgent(action_dim=2, input_shape=state.shape)
     # Make a dummy pass through the model to initialize its weights
     dummy_state = np.zeros((1,) + state.shape)  # Assuming state has shape (84, 84, 4)
     agent.model(dummy_state)  # This initializes the weights
@@ -159,13 +158,14 @@ def train_model(env_config, num_envs):
     replay_queue = mp.Queue(maxsize=10000)
     replay_buffer = ReplayBuffer()
 
+    agent = DQNAgent(action_dim=2, input_shape=(84, 84, 4))  # Create the agent here
+
     processes = []
     for _ in range(num_envs):
-        p = mp.Process(target=worker, args=(env_config, model_weights_queue, replay_queue, env_config))
+        p = mp.Process(target=worker, args=(env_config, model_weights_queue, replay_queue, agent))
         p.start()
         processes.append(p)
 
-    agent = DQNAgent(action_dim=2, input_shape=(84, 84, 4))
     for episode in range(env_config.num_episodes):
         while not replay_queue.empty():
             replay_buffer.put(*replay_queue.get())
