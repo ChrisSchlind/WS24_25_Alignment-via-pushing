@@ -51,7 +51,10 @@ max_steps_per_episode: 200 #200
 batch_size: 16
 target_update_freq: 100
 save_freq: 100
-weights_path: ""
+
+# Load pretrained model
+weights_dir: "models/best"
+weights_path: "dqn_epsiode_100"
 
 # Model parameters
 model_dir: "models/dqn"
