@@ -1,0 +1,70 @@
+--------------------------------------------------------------------------------------------------------
+#                                     Aufgebautes Wissen zum RL
+--------------------------------------------------------------------------------------------------------
+
+1. Netz reagiert unfassbar sensibel auf zu hohe (positiv) und zu niedrige (negative) rewards
+    - Im Grunde alles was kleiner als -1 und größer als 1 ist hat erheblichen Einfluss auf das Netz
+    - Extrema machen das Netz instabil im Training
+    - In endlicher Trainingszeit "erholt" sich das Netz davon nicht mehr 
+    - Dies ist während des Trainings (schnell) sichtbar, wenn der Agent nur noch Actionen nahe bei -1 oder 1 schätzt bzw. nach unserer Normalisierung nah bei 0 oder 1
+    - Das Netz gibt quasi auf und "lernt", dass nichs tun immer noch im kumulativen Reward besser ist als etwas zu machen
+
+Lösung: Reward Normalisierung nach dem samplen aus dem Buffer innerhalb der Trainingsfunktion, Normalisierung im Bereich zwischen -1 und 1
+    ==> Hierdurch ist das Netz weniger anfällig auf Ausreißer in den Rewards
+    ==> Einstellung der passenden Rewards ist nicht mehr so kompliziert, da durch die Normalisierung dies wieder geglättet wieder
+    ==> Vorher war es quasi unmöglich ein gutes Mittelmaß an Rewards zu finden, welche nicht nach ca. 20 Epochen in einem Agenten, der nur noch -1 und 1 schätzt, endet.
+    ==> Einziges Problem ist, dass das Training hierdurch wahrscheinlich deutlich langsamer ist aber dafür stabiler bleibt
+
+2. Mehr Exploration zu Beginn ist zwingend notwendig, um genügend und vor allem verschiedene Traingsdaten im Buffer zu haben
+    - Ohne die Exploration zu Beginn bewegt sich der Roboter quasi nie und probiert nichts aus, 
+      Agent sieht und lernt nur das nichts tun schlecht ist, aber das es was besseres gibt sieht er nie
+    - Mittelmaß für die Dauer der Exploration muss noch gefunden werden
+    - Hier ist das Problem recht kompliziert mit verschiedensten Zuständen, weswegen mehr Exploration von Vorteil ist
+
+Lösung: Epsilon Annealing, um mit einem hohen Epsilon-Wert zu starten (0,5 bis 1), welcher dann nach jeden Trainingsschritt um einen Faktor (0,995 bis 0,99995) herabgesetzt wieder
+    ==> Viel Exploration zu Beginn
+    ==> Agent muss sich nicht auf seine Exploitation alleine verlassen
+    ==> Wechsel der beiden Zustände findet fließend statt
+
+3. Unausgeglichener Datensatz durch mehr Cases in welchen der Reward klein oder negativ ist im Vergleich zu hohen positiven Rewards
+    - Unter der These, dass die Rewards grundsätzlich halbwegs gut abbilden, was die Aufgabe ist, ist es erwartungsgemäßg, dass zu Beginn und in der Mitte 
+      die Summe an Negativbeispielen stochastisch kleiner als die der Positivbeispiele sein wieder
+    - Es ist wahrscheinlicher, dass in der Exploration etwas schlechtes als etwas gutes passiert
+    - Hierdurch ist der Datensatz im ReplayBuffer unausgeglichen, was das Training destabilisiert
+    - Resultat ist, dass der Agent schnell nur noch -1 bzw. 0 schätzt, da er mehr negative Fälle und damit negative Rewards gesehen hat
+    - Er lernt buchstäblich von Beginn an nie was eigentlich gemacht werden muss
+
+Lösung: PrioritizedReplayBuffer, um beim samplen häufiger "wichtige" Erkenntnisse zu zeigen
+    ==> durch die interne Priorisierung, werden jegliche Rewards häufiger beim samplen ausgewählt, die einen hohen Wert haben (sowohl positiv als auch negativ)
+    ==> Hierdurch soll der Agent lernen, was richtig und was falsch ist
+    ==> Aufgrund des unausgeglichenen Datensatzes bekommen positive Rewards noch eine minimal höhere Priorisierung, um dem Netz für das Training häufiger gezeigt zu werden
+    ==> "Unnötige" Aktionen, die keinen nennenswerten Reward haben werden häufiger gesampelt
+    ==> Macht Training schneller und effektiver
+
+Lösung: Mehr Objekte im Task erzeugen, dass sowohl während des rumprobierens in der Exploration als auch in der späteren Exploitation gelernt wird was wichtig ist
+    ==> Maximale Anzahl an Objekten vergrößeren, Aktuell scheint jedoch 5 das Maximum für eine robuste Taskerstellung zu sein, da bei mehr das Training abbricht,
+        da keine Random Pose für alle Objekte gefunden werden kann
+    ==> Minimale Anzahl wird auf 4 gesetzt, damit möglichst hoch, aber trotzdem noch ein Unterschied zu Maximum, damit Netz hoffentlich generalisierender lernt
+    ==> Durch mehr Objekte "passiert" auch mal häufiger etwas, wodurch der Datensatz generell mit mehr sinnvollen Daten gefüllt wird
+
+Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve Dinge mit einem überproportional hohen Rewards belohnt werden, ohne eine Instabilität 
+        des Trainings zu riskieren, wodurch es um ein vielfaches leichter wird zu trainieren
+
+--------------------------------------------------------------------------------------------------------
+#                                   Grundlegende Erkenntnisse:
+--------------------------------------------------------------------------------------------------------
+
+    - Liegen die Aktionen des Agenten über einen längeren Zeitraum (5-10 Epochen) nur noch bei -1 und 1 bzw. 0 und 1, dann kann das Training abgebrochen werden
+    - Ziel ist es, dass im Übergang zwischen hoher Exploration und Exploitation soll das Netz unterschiedliche Werte schätzen und selbst rumprobieren
+    - Optimal sind hierbei Werte, welche nahe bei 0 bzw. 0.5 liegen, da das Netz bzw. der Agent durch die Rewards noch nicht drastisch in eine Richtung "überkonvergiert" ist
+    - Auf Basis von diesem Punkt kann tatsächliches lernen stattfinden
+    - Durch hohe Exploration zu Beginn mit zufälligen Bewegungen passiert es häufig, dass Objekte vom Tisch geworfen werden, wodurch es sehr hohe negative Rewards gibt,
+      aufgrund der Reward Normalisierung haben diese jedoch keinen größeren Einfluss auf das Netz und machen das Training hierdurch instabil
+    - Durch PTP-Bewegung fliegt der Zylinder bei großen Bewegungen von einer Ecke in die andere auch gerne mal über die Objekte, was eigentlich unvorteilhaft ist;
+      es könnte jedoch sein, dass das Netz das lernt und damit umgeht durch z. B. Kleine Bewegungen, wenn ein Objekt verschoben werden soll
+
+Muss noch bestätigt werden:
+    - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
+    Frage: Sind die Tiefenbilder richtig normiert, liegen diese im selben Bereich wie die RGB Bilder?
+    Frage: Muss der Zylinder/das Werkzeug ebenfalls noch in das Tiefenbild geplottet werden für ein besseres Training?
+    Frage: Lernt der Agent was von beiden von Bedeutung ist?
