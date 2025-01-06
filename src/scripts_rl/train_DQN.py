@@ -9,8 +9,8 @@ import tensorflow as tf
 import random
 from collections import deque
 import cv2
+import os
 from matplotlib import pyplot as plt
-
 from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
 from bullet_env.ur10_cell import UR10Cell  # Import UR10Cell
@@ -109,7 +109,7 @@ class PrioritizedReplayBuffer:
         return len(self.buffer)
 
 class DQNAgent:
-    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4)):
+    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4), weights_path="", weights_dir="models/best"):
         self.action_dim = action_dim
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
@@ -127,6 +127,18 @@ class DQNAgent:
         # Create and initialize target model
         self.target_model = ConvDQN(action_dim)
         self.target_model(dummy_state)  # Initialize with correct shape
+
+        if weights_path:
+            try:
+                weights_file_path = os.path.join(weights_dir, weights_path)
+                self.model.load_weights(weights_file_path)
+                logger.debug(f"Loaded weights from {weights_file_path}")
+                self.epsilon = 0.2 # expectation is that the model is already trained
+                logger.debug(f"Setting epsilon to {self.epsilon}")
+            except Exception as e:
+                logger.error(f"Error loading weights from {weights_file_path}: {e}")
+        else:
+            logger.debug("Starting model with random weights")
 
         # Now we can safely set weights
         self.target_model.set_weights(self.model.get_weights())
@@ -254,7 +266,7 @@ def main(cfg: DictConfig) -> None:
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
     input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
-    agent = DQNAgent(action_dim, input_shape=input_shape)
+    agent = DQNAgent(action_dim, input_shape=input_shape, weights_path=cfg.weights_path, weights_dir=cfg.weights_dir)
     logger.info("DQN agent initialized.")
     replay_buffer = PrioritizedReplayBuffer()
     logger.info("Replay buffer initialized.")
@@ -269,7 +281,10 @@ def main(cfg: DictConfig) -> None:
         episode_reward = 0
 
         # Adjust max steps per episode for the first few episodes to improve learning speed
-        max_steps = min(cfg.max_steps_per_episode, (episode + 1) * 10)
+        if cfg.weights_path: # if pretrained model is loaded, use max steps from config
+            max_steps = cfg.max_steps_per_episode
+        else:
+            max_steps = min(cfg.max_steps_per_episode, (episode + 1) * 10)
         logger.debug(f"Starting episode {episode} with max steps {max_steps}.")
 
         for step in range(max_steps):
@@ -304,7 +319,7 @@ def main(cfg: DictConfig) -> None:
 
         # Save model periodically
         if episode % cfg.save_freq == 0 and episode > 0:
-            agent.model.save_weights(f"{cfg.model_dir}/dqn_episode_{episode}")
+            agent.model.save_weights(f"{cfg.model_dir}/dqn_episode_{episode}", save_format="tf")
 
     env.close()
     logger.debug("Training completed.")
