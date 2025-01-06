@@ -236,8 +236,8 @@ class PushingEnv(BulletEnv):
             self.workspace_bounds[0][0] <= eef_pos[0] <= self.workspace_bounds[0][1]
             and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
         ):
-            total_reward += 1.0
-            logger.debug("Positive reward +1.0 given for being within workspace bounds.")
+            total_reward += 0.5
+            logger.debug("Positive reward +0.5 given for being within workspace bounds.")
 
         # Punish for moving outside movement bounds
         if self.movement_punishment:
