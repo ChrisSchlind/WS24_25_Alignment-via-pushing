@@ -21,6 +21,10 @@
 
 - Multi-Simulation? (mehrere environments gleichzeitig laufen lassen und Buffer füttern?)
 
+- Künstlichen positiven Reward für Bewegungen in falsche Richtung entfernen
+
+- Original ReplayBuffer Klasse und train Funktion in DQNAgent entfernen
+
 
 ## Priority 4 (optional)
 
