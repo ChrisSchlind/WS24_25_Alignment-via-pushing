@@ -41,8 +41,8 @@ absolut_movement: True
 no_movement_threshold: 0.02
 
 # Reward
-distance_reward_scale: 300
-iou_reward_scale: 300
+distance_reward_scale: 1000
+iou_reward_scale: 1000
 
 # Training parameters
 num_envs: 1
