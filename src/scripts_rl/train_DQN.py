@@ -109,28 +109,49 @@ class PrioritizedReplayBuffer:
         return len(self.buffer)
     
 class DQNSupervisor:
-    def __init__(self, action_dim, env, epsilon=0.0, epsilon_min=0.1, epsilon_decay=0.999):
+    def __init__(self, action_dim, env, workspace_bounds, min_obj_area_threshold=0.1, max_obj_area_threshold=0.4):
         self.action_dim = action_dim
         self.env = env
-        self.epsilon = epsilon
-        self.epsilon_min = epsilon_min
-        self.epsilon_decay = epsilon_decay
+        self.workspace_bounds = workspace_bounds
+        self.min_obj_area_threshold = min_obj_area_threshold
+        self.max_obj_area_threshold = max_obj_area_threshold
+        self.last_id = 0
 
     def ask_supervisor(self):
-
-        #if np.random.random() < self.epsilon:
-        #    # Random action in continuous space
-        #    return np.random.uniform(-1, 1, self.action_dim)
         
         # Initialize action
         action = np.zeros(self.action_dim)
+
+        # Initialize id
+        id = 0
         
         # Randomly select an object and area
-        id = random.randint(0, len(self.env.current_task.push_objects) - 1)
-        obj, _ = self.env.current_task.get_object_and_area_with_same_id(id)
+        while id == self.last_id: # Ensure that the same object is not selected twice
+            id = random.randint(0, len(self.env.current_task.push_objects) - 1)
+            if len(self.env.current_task.push_objects) == 1: # If only one object, than that's only option
+                break
+        self.last_id = id
+        obj, area = self.env.current_task.get_object_and_area_with_same_id(id)
 
-        # Get the object pose
+        # Get the object and areapose
         obj_pose = self.env.get_pose(obj.unique_id)
+        area_pose = self.env.get_pose(area.unique_id)
+        obj_pos = obj_pose.translation[:2]
+        area_pos = area_pose.translation[:2]
+
+        # Check if object is already in area or too far away
+        dist = np.linalg.norm(obj_pos - area_pos)
+        if dist <= self.min_obj_area_threshold or dist >= self.max_obj_area_threshold:
+            logger.debug(f"Supervisor said: Random action because object with distance {dist} is already in area or too far away.")
+            return np.random.uniform(-1, 1, self.action_dim)
+        
+        # Check if object is outside of workspace, than it is not good to push it because we will only risk to push it off the table
+        if not (
+                self.workspace_bounds[0][0] <= obj_pose.translation[0] <= self.workspace_bounds[0][1]
+                and self.workspace_bounds[1][0] <= obj_pose.translation[1] <= self.workspace_bounds[1][1]
+        ):
+            logger.debug(f"Supervisor said: Random action because object is outside of workspace.")
+            return np.random.uniform(-1, 1, self.action_dim)
 
         # Convert object pose to normalized action between [-1 1]
         x_range = self.env.movement_bounds[0][1] - self.env.movement_bounds[0][0]
@@ -138,18 +159,16 @@ class DQNSupervisor:
         action[0] = 2 * ((obj_pose.translation[0] - self.env.movement_bounds[0][0]) / x_range) - 1
         action[1] = 2 * ((obj_pose.translation[1] - self.env.movement_bounds[1][0]) / y_range) - 1
 
-        logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pose}")
+        # Clip action between [-1 1], needed for objects that are pushed off the table and now lie outside of workspace in the void
+        action = np.clip(action, -1, 1)
 
-        # Reduce epsilon after each training step
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+        logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pose}")
         
         return action
 
 class DQNAgent:
-    def __init__(self, action_dim, supervisor, epsilon=1.0, epsilon_min=1.0, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4), weights_path="", weights_dir="models/best"):
+    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4), weights_path="", weights_dir="models/best"):
         self.action_dim = action_dim
-        self.supervisor = supervisor
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
@@ -172,7 +191,7 @@ class DQNAgent:
                 weights_file_path = os.path.join(weights_dir, weights_path)
                 self.model.load_weights(weights_file_path)
                 logger.debug(f"Loaded weights from {weights_file_path}")
-                self.epsilon = 0.1 # expectation is that the model is already trained but ReplayBuffer is empty
+                self.epsilon = 0.4 # expectation is that the model is already trained but ReplayBuffer is empty
                 logger.debug(f"Setting epsilon to {self.epsilon}")
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
@@ -183,15 +202,11 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.00025)
 
-    def get_action(self, state, training=True):
+    def get_action(self, state, supervisor, training=True):
         if training and np.random.random() < self.epsilon:
-            # Random action in continuous space
-            #logger.debug(f"Random action taken with {self.epsilon}")
-            #return np.random.uniform(-1, 1, self.action_dim)
-
             # Ask supervisor for action
             logger.debug(f"Supervisor asked for action with epsilon {self.epsilon}")
-            return self.supervisor.ask_supervisor()
+            return supervisor.ask_supervisor()
 
         state = np.expand_dims(state, axis=0)
         # Direct continuous output from network
@@ -200,7 +215,7 @@ class DQNAgent:
         # Ensure actions are in [-1,1] range
         return np.clip(action, -1, 1)
     
-    def train_prioritized(self, replay_buffer, batch_size=32, beta=0.4):
+    def train(self, replay_buffer, batch_size=32, beta=0.4):
         # Check if the replay buffer is of the correct type
         if not isinstance(replay_buffer, PrioritizedReplayBuffer):
             raise TypeError("The replay buffer used must be an instance of PrioritizedReplayBuffer. Change replay_buffer in main from ReplayBuffer to PrioritizedReplayBuffer or use train method.")
@@ -310,10 +325,9 @@ def main(cfg: DictConfig) -> None:
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
     input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
-    supervisor = DQNSupervisor(action_dim, env)
-    logger.info("Supervisor initialized.")
-    agent = DQNAgent(action_dim, supervisor=supervisor, input_shape=input_shape, weights_path=cfg.weights_path, weights_dir=cfg.weights_dir)
-    logger.info("DQN agent initialized.")
+    supervisor = DQNSupervisor(action_dim, env, workspace_bounds=cfg.workspace_bounds)
+    agent = DQNAgent(action_dim, input_shape=input_shape, weights_path=cfg.weights_path, weights_dir=cfg.weights_dir)
+    logger.info("DQN supervisor and DQN agent initialized.")
     replay_buffer = PrioritizedReplayBuffer()
     logger.info("Replay buffer initialized.")
 
@@ -334,15 +348,15 @@ def main(cfg: DictConfig) -> None:
         logger.debug(f"Starting episode {episode} with max steps {max_steps}.")
 
         for step in range(max_steps):
-            action = agent.get_action(state)
+            action = agent.get_action(state, supervisor)
 
             # Get next state using environment's step function
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, _ , failed = env.step(action)
 
             replay_buffer.put(state, action, reward, next_state, done)
 
             if replay_buffer.size() >= cfg.batch_size:
-                loss = agent.train_prioritized(replay_buffer, cfg.batch_size)
+                loss = agent.train(replay_buffer, cfg.batch_size)
 
             if step % cfg.target_update_freq == 0:
                 agent.update_target()
@@ -351,6 +365,10 @@ def main(cfg: DictConfig) -> None:
             episode_reward += reward
 
             if done:
+                break
+
+            if failed:
+                logger.debug(f"Episode {episode} failed at step {step} because all objects are outside of workspace.")
                 break
 
         logger.debug(f"Episode {episode}: Reward = {episode_reward}")
