@@ -24,6 +24,7 @@ class PushingEnv(BulletEnv):
         distance_reward_scale,
         iou_reward_scale,  # Add this parameter
         no_movement_threshold,
+        max_moves_without_positive_reward,
         success_threshold=0.05,
         max_steps=200,
         coordinate_axes_urdf_path=None,
@@ -46,14 +47,15 @@ class PushingEnv(BulletEnv):
         self.distance_reward_scale = distance_reward_scale
         self.iou_reward_scale = iou_reward_scale  # Initialize the attribute
         self.no_movement_threshold = no_movement_threshold
+        self.max_moves_without_positive_reward = max_moves_without_positive_reward
         self.dist_list = []
         self.old_dist = []
         self.iou_list = []
         self.old_iou = []
         self.old_eef_pos = None
         self.debug = debug
+        self.moves_without_positive_reward = 0       
         
-
     def reset(self):
         """Reset environment and return initial state"""
         # Clean up previous task if exists
@@ -167,17 +169,13 @@ class PushingEnv(BulletEnv):
         # Normalize RGB values between [0,1]
         rgb = rgb / 255.0
 
-        # Normalize RGB values between [-1, 1] (as required by DQN)
-        # result is better than without normalization but at the end the agent is not learning
-        #rgb = (rgb - 127.5) / 127.5
-
         # Resize and normalize depth image (500x500 -> 84x84)
         depth = obs["depth"]
         if len(depth.shape) == 3:
             depth = depth[:, :, 0]  # Take first channel if depth is 3D
         depth = cv2.resize(depth, (84, 84), interpolation=cv2.INTER_AREA)
 
-        # Normalize depth values
+        # Normalize depth values between [0,1] and prevent division by zero
         depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
 
         # Add channel dimension to depth
@@ -193,7 +191,14 @@ class PushingEnv(BulletEnv):
     def _calculate_reward(self):
         """Calculate reward based on distance and iou."""
         total_reward = 0
+        positive_reward_flag = False
         logger.debug(f"Calculating reward for step {self.current_step}")
+
+        '''
+        REWARDS:
+        1. Distance-based reward
+        2. IoU-based reward
+        '''
 
         for i in range(len(self.current_task.push_objects)):
             # Current objects and areas
@@ -209,15 +214,14 @@ class PushingEnv(BulletEnv):
             # Calculate reward based on distance between current and previous step
             if self.current_step != 1:  # Skip first step because there is no previous step
                 absolute_distance = round((self.old_dist[i] - self.dist_list[i]), 3)
+                
+                if absolute_distance > 0: # ignore negative movement, only reward positive movement
+                    current_reward = absolute_distance * self.distance_reward_scale
+                    self.moves_without_positive_reward = 0 # reset counter
+                    positive_reward_flag = True
+                else:
+                    current_reward = 0.0   
 
-                '''if 0.1 < self.dist_list[i] < 0.4: # if the robot touches the object it gets a positive reward
-                    current_reward = abs(absolute_distance) * self.distance_reward_scale
-                else: # negative reward if the robot moves the obejct away from the area if the object is already near the area
-                    current_reward = absolute_distance * self.distance_reward_scale     
-                    
-                    ==> just confuses the agent, reward should "explain" what the agent should do, not what it should not do
-                    '''
-                current_reward = absolute_distance * self.distance_reward_scale           
                 total_reward += round(current_reward, 2)
                 logger.debug(f"Distance reward for object {i}: {round(current_reward, 2)}")
 
@@ -227,21 +231,22 @@ class PushingEnv(BulletEnv):
                 #relative_iou = IOU - self.old_iou[i]
                 absolute_iou = IOU * 10e6 # scale IoU to be greater than 0.1, currently all IoU values are XXXXe-09
                 total_reward += round(absolute_iou * self.iou_reward_scale, 2)
+                if absolute_iou > 0:
+                    self.moves_without_positive_reward = 0 # reset counter
+                    positive_reward_flag = True
                 logger.debug(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
 
 
         # Copy current distance and IoU lists for next step
         self.old_dist = copy.deepcopy(self.dist_list)
-        self.old_iou = copy.deepcopy(self.iou_list)
+        self.old_iou = copy.deepcopy(self.iou_list)        
 
-        # Slight reward for being within workspace bounds
-        eef_pos = self.robot.get_eef_pose().translation[:2]
-        if (
-            self.workspace_bounds[0][0] <= eef_pos[0] <= self.workspace_bounds[0][1]
-            and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
-        ):
-            total_reward += 5.0
-            logger.debug("Positive reward +5.0 given for being within workspace bounds.")
+        '''
+        PUNISHMENTS:
+        1. Moving outside movement bounds
+        2. Not moving at all
+        3. Not moving object or increasing IoU
+        '''
 
         # Punish for moving outside movement bounds
         if self.movement_punishment:
@@ -249,14 +254,24 @@ class PushingEnv(BulletEnv):
             logger.debug("Negative reward -10.0 given for moving outside movement bounds.")
 
         # Punishment for not moving
+        eef_pos = self.robot.get_eef_pose().translation[:2]
         if np.linalg.norm(eef_pos - self.old_eef_pos) < self.no_movement_threshold and self.current_step != 1:
             total_reward -= 100.0
             logger.debug("Negative reward -100.0 given for not moving.")
         # No positive reward for moving because than the robot will just move around without any purpose
-        
 
         # Update old eef position
         self.old_eef_pos = copy.deepcopy(eef_pos)
+
+        # Punishment for not moving object or increasing IoU
+        if self.moves_without_positive_reward >= self.max_moves_without_positive_reward:
+            penalty = 100 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) # increase penalty for every step after max_moves_without_positive_reward
+            total_reward -= penalty
+            logger.debug(f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps.")
+
+        # if the agent is not moving an object or increasing the IoU, count up
+        if not positive_reward_flag:
+            self.moves_without_positive_reward += 1        
 
         return total_reward
 
