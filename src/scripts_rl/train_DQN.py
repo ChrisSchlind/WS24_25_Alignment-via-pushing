@@ -109,12 +109,13 @@ class PrioritizedReplayBuffer:
         return len(self.buffer)
     
 class DQNSupervisor:
-    def __init__(self, action_dim, env, workspace_bounds, min_obj_area_threshold=0.1, max_obj_area_threshold=0.4):
+    def __init__(self, action_dim, env, workspace_bounds, min_obj_area_threshold=0.1, max_obj_area_threshold=0.6, extra_distance=0.1):
         self.action_dim = action_dim
         self.env = env
         self.workspace_bounds = workspace_bounds
         self.min_obj_area_threshold = min_obj_area_threshold
         self.max_obj_area_threshold = max_obj_area_threshold
+        self.extra_distance = extra_distance
         self.last_id = 0
 
     def ask_supervisor(self):
@@ -124,16 +125,25 @@ class DQNSupervisor:
 
         # Initialize id
         id = 0
+        while_loop = True
+
+        # Check if one object got positive reward last step otherwise take a random object under the condition that it is not the same object as last step
+        for i in range(len(self.env.current_task.push_objects)):
+            if self.env.absolute_distances[i] > 0 and self.env.distance_rewards[i] > 0:
+                id = i
+                while_loop = False
         
-        # Randomly select an object and area
-        while id == self.last_id: # Ensure that the same object is not selected twice
+        # Randomly select an object
+        while id == self.last_id and while_loop == True: # Ensure that the same object is not selected twice
             id = random.randint(0, len(self.env.current_task.push_objects) - 1)
-            if len(self.env.current_task.push_objects) == 1: # If only one object, than that's only option
+
+            if len(self.env.current_task.push_objects) == 1: # If only one object, than that's the only option
                 break
+
         self.last_id = id
         obj, area = self.env.current_task.get_object_and_area_with_same_id(id)
 
-        # Get the object and areapose
+        # Get the object and area pose
         obj_pose = self.env.get_pose(obj.unique_id)
         area_pose = self.env.get_pose(area.unique_id)
         obj_pos = obj_pose.translation[:2]
@@ -147,8 +157,8 @@ class DQNSupervisor:
         
         # Check if object is outside of workspace, than it is not good to push it because we will only risk to push it off the table
         if not (
-                self.workspace_bounds[0][0] <= obj_pose.translation[0] <= self.workspace_bounds[0][1]
-                and self.workspace_bounds[1][0] <= obj_pose.translation[1] <= self.workspace_bounds[1][1]
+                (self.workspace_bounds[0][0] - self.extra_distance) <= obj_pose.translation[0] <= (self.workspace_bounds[0][1] + self.extra_distance)
+                and (self.workspace_bounds[1][0] - self.extra_distance) <= obj_pose.translation[1] <= (self.workspace_bounds[1][1] + self.extra_distance)
         ):
             logger.debug(f"Supervisor said: Random action because object is outside of workspace.")
             return np.random.uniform(-1, 1, self.action_dim)

@@ -54,7 +54,9 @@ class PushingEnv(BulletEnv):
         self.old_iou = []
         self.old_eef_pos = None
         self.debug = debug
-        self.moves_without_positive_reward = 0       
+        self.moves_without_positive_reward = 0
+        self.absolute_distances = []
+        self.distance_rewards = []
         
     def reset(self):
         """Reset environment and return initial state"""
@@ -80,11 +82,13 @@ class PushingEnv(BulletEnv):
         self.current_step = 0
 
         # Create initial distance and IoU lists
-        for i in range(len(self.current_task.push_objects)):
+        for _ in range(len(self.current_task.push_objects)):
             self.dist_list.append(0.0)
             self.old_dist.append(0.0)
             self.iou_list.append(0.0)
             self.old_iou.append(0.0)
+            self.absolute_distances.append(0.0)
+            self.distance_rewards.append(0.0)
 
         # Reset eef pose
         self.old_eef_pos = self.robot.get_eef_pose().translation[:2]
@@ -226,10 +230,14 @@ class PushingEnv(BulletEnv):
                     self.moves_without_positive_reward = 0 # reset counter
                     positive_reward_flag = True
                 else:
-                    current_reward = 0.0   
+                    current_reward = 0.0
 
                 total_reward += round(current_reward, 2)
                 logger.debug(f"Distance reward for object {i}: {round(current_reward, 2)}")
+
+                # Save distances and reward for DQNSupervisor
+                self.absolute_distances[i] = absolute_distance
+                self.distance_rewards[i] = current_reward
 
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
             if self.current_step != 1:
@@ -299,19 +307,23 @@ class PushingEnv(BulletEnv):
         # All objects are aligned
         return True
     
-    def _check_objects(self):
-        """Check if the objects are inside the workspace bounds"""
+    def _check_objects(self, extra_distance=0.1):
+        """Check if all the objects are inside the workspace bounds"""
+        counter = 0
         for i in range(len(self.current_task.push_objects)):
             obj = self.current_task.push_objects[i]
             obj_pos = self.get_pose(obj.unique_id).translation[:2]
 
-            if {obj_pos[0] < self.workspace_bounds[0][0] or 
-                obj_pos[0] > self.workspace_bounds[0][1] or 
-                obj_pos[1] < self.workspace_bounds[1][0] or 
-                obj_pos[1] > self.workspace_bounds[1][1]}:
-                return False
+            if {obj_pos[0] < (self.workspace_bounds[0][0] - extra_distance) or 
+                obj_pos[0] > (self.workspace_bounds[0][1] + extra_distance) or 
+                obj_pos[1] < (self.workspace_bounds[1][0] - extra_distance) or 
+                obj_pos[1] > (self.workspace_bounds[1][1] + extra_distance)}:
+                counter += 1
 
-        return True
+        if counter == len(self.current_task.push_objects):
+            return True
+
+        return False
 
     def render(self):
         """Return the current camera view"""
