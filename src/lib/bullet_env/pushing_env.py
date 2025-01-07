@@ -95,6 +95,7 @@ class PushingEnv(BulletEnv):
     def step(self, action):
         """Execute action and return (next_state, reward, done, info)"""
         self.current_step += 1
+        failed = False
 
         # Reset movement punishment flag
         self.movement_punishment = False
@@ -157,7 +158,12 @@ class PushingEnv(BulletEnv):
         # Include additional info
         info = {"current_step": self.current_step, "max_steps": self.max_steps}
 
-        return next_state, reward, done, info
+        # Check if objects are inside workspace bounds
+        if not self._check_objects():
+            failed = True
+            logger.debug("Objects are outside workspace bounds.")
+
+        return next_state, reward, done, info, failed
 
     def _get_observation(self):
         """Get RGB + depth observation from orthographic camera"""
@@ -291,6 +297,20 @@ class PushingEnv(BulletEnv):
                 return False
 
         # All objects are aligned
+        return True
+    
+    def _check_objects(self):
+        """Check if the objects are inside the workspace bounds"""
+        for i in range(len(self.current_task.push_objects)):
+            obj = self.current_task.push_objects[i]
+            obj_pos = self.get_pose(obj.unique_id).translation[:2]
+
+            if {obj_pos[0] < self.workspace_bounds[0][0] or 
+                obj_pos[0] > self.workspace_bounds[0][1] or 
+                obj_pos[1] < self.workspace_bounds[1][0] or 
+                obj_pos[1] > self.workspace_bounds[1][1]}:
+                return False
+
         return True
 
     def render(self):
