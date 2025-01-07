@@ -210,10 +210,14 @@ class PushingEnv(BulletEnv):
             if self.current_step != 1:  # Skip first step because there is no previous step
                 absolute_distance = round((self.old_dist[i] - self.dist_list[i]), 3)
 
-                if 0.1 < self.dist_list[i] < 0.3: # if the robot touches the object it gets a positive reward
+                '''if 0.1 < self.dist_list[i] < 0.4: # if the robot touches the object it gets a positive reward
                     current_reward = abs(absolute_distance) * self.distance_reward_scale
                 else: # negative reward if the robot moves the obejct away from the area if the object is already near the area
-                    current_reward = absolute_distance * self.distance_reward_scale                
+                    current_reward = absolute_distance * self.distance_reward_scale     
+                    
+                    ==> just confuses the agent, reward should "explain" what the agent should do, not what it should not do
+                    '''
+                current_reward = absolute_distance * self.distance_reward_scale           
                 total_reward += round(current_reward, 2)
                 logger.debug(f"Distance reward for object {i}: {round(current_reward, 2)}")
 
@@ -236,8 +240,8 @@ class PushingEnv(BulletEnv):
             self.workspace_bounds[0][0] <= eef_pos[0] <= self.workspace_bounds[0][1]
             and self.workspace_bounds[1][0] <= eef_pos[1] <= self.workspace_bounds[1][1]
         ):
-            total_reward += 0.5
-            logger.debug("Positive reward +0.5 given for being within workspace bounds.")
+            total_reward += 5.0
+            logger.debug("Positive reward +5.0 given for being within workspace bounds.")
 
         # Punish for moving outside movement bounds
         if self.movement_punishment:
@@ -246,8 +250,8 @@ class PushingEnv(BulletEnv):
 
         # Punishment for not moving
         if np.linalg.norm(eef_pos - self.old_eef_pos) < self.no_movement_threshold and self.current_step != 1:
-            total_reward -= 10.0
-            logger.debug("Negative reward -10.0 given for not moving.")
+            total_reward -= 100.0
+            logger.debug("Negative reward -100.0 given for not moving.")
         # No positive reward for moving because than the robot will just move around without any purpose
         
 
