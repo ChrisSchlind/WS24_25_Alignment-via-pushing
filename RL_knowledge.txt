@@ -62,6 +62,10 @@ Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve
       aufgrund der Reward Normalisierung haben diese jedoch keinen größeren Einfluss auf das Netz und machen das Training hierdurch instabil
     - Durch PTP-Bewegung fliegt der Zylinder bei großen Bewegungen von einer Ecke in die andere auch gerne mal über die Objekte, was eigentlich unvorteilhaft ist;
       es könnte jedoch sein, dass das Netz das lernt und damit umgeht durch z. B. Kleine Bewegungen, wenn ein Objekt verschoben werden soll
+    - Je länger das Training, desto stärker wird sichtbar wohin das Netz konvergiert. Hierbei gibt es drei Fälle:
+        1. Actions liegen nahe bei 0 oder sind 0: Netz hat keine Policy gefunden, nichts tun liefert tolerierbare Bestrafung, hoher kumulierter negativer Reward über alle Episoden
+        2. Actions liegen nahe bei 1 oder sind 1: Netz hat keine Policy gefunden, nichts tun liefert tolerierbare Bestrafung, hoher kumulierter positiver Reward über alle Episoden
+        3. Actions werden Situationsabhängig predictet: Netz hat eine verwendbare Policy gefunden, kumulierter Reward ist ausgeglichen und aussagekräftig für gewünschtes Ziel
 
 Muss noch bestätigt werden:
     - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
