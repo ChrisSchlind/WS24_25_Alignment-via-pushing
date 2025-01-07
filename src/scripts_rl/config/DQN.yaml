@@ -41,8 +41,8 @@ absolut_movement: True
 no_movement_threshold: 0.02
 
 # Reward
-distance_reward_scale: 3000
-iou_reward_scale: 5000
+distance_reward_scale: 1000
+iou_reward_scale: 2000
 max_moves_without_positive_reward: 3
 
 # Training parameters
@@ -55,7 +55,7 @@ save_freq: 10
 
 # Load pretrained model
 weights_dir: "models/best"
-weights_path: "dqn_episode_150"
+weights_path: ""
 
 # Model parameters
 model_dir: "models/dqn"
