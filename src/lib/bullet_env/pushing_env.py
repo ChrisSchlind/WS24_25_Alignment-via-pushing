@@ -307,23 +307,23 @@ class PushingEnv(BulletEnv):
         # All objects are aligned
         return True
     
-    def _check_objects(self, extra_distance=0.1):
+    def _check_objects(self, extra_distance=0.05):
         """Check if all the objects are inside the workspace bounds"""
         counter = 0
         for i in range(len(self.current_task.push_objects)):
             obj = self.current_task.push_objects[i]
             obj_pos = self.get_pose(obj.unique_id).translation[:2]
 
-            if {obj_pos[0] < (self.workspace_bounds[0][0] - extra_distance) or 
-                obj_pos[0] > (self.workspace_bounds[0][1] + extra_distance) or 
-                obj_pos[1] < (self.workspace_bounds[1][0] - extra_distance) or 
-                obj_pos[1] > (self.workspace_bounds[1][1] + extra_distance)}:
+            if ((obj_pos[0] < (self.workspace_bounds[0][0] - extra_distance)) or 
+                (obj_pos[0] > (self.workspace_bounds[0][1] + extra_distance)) or 
+                (obj_pos[1] < (self.workspace_bounds[1][0] - extra_distance)) or 
+                (obj_pos[1] > (self.workspace_bounds[1][1] + extra_distance))):
                 counter += 1
 
         if counter == len(self.current_task.push_objects):
-            return True
+            return False
 
-        return False
+        return True
 
     def render(self):
         """Return the current camera view"""
