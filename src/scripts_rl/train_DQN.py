@@ -133,7 +133,7 @@ class DQNAgent:
                 weights_file_path = os.path.join(weights_dir, weights_path)
                 self.model.load_weights(weights_file_path)
                 logger.debug(f"Loaded weights from {weights_file_path}")
-                self.epsilon = 0.2 # expectation is that the model is already trained
+                self.epsilon = 0.5 # expectation is that the model is already trained but ReplayBuffer is empty
                 logger.debug(f"Setting epsilon to {self.epsilon}")
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
