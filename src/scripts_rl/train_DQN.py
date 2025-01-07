@@ -55,7 +55,7 @@ class PrioritizedReplayBuffer:
 
         # Increase the priority if the reward is positive
         if reward > 0:
-            priority *= 1.5
+            priority *= 2.0
 
         self.buffer.append([state, action, reward, next_state, done])
         self.priorities.append(priority)
@@ -107,10 +107,49 @@ class PrioritizedReplayBuffer:
 
     def size(self):
         return len(self.buffer)
+    
+class DQNSupervisor:
+    def __init__(self, action_dim, env, epsilon=0.0, epsilon_min=0.1, epsilon_decay=0.999):
+        self.action_dim = action_dim
+        self.env = env
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+
+    def ask_supervisor(self):
+
+        #if np.random.random() < self.epsilon:
+        #    # Random action in continuous space
+        #    return np.random.uniform(-1, 1, self.action_dim)
+        
+        # Initialize action
+        action = np.zeros(self.action_dim)
+        
+        # Randomly select an object and area
+        id = random.randint(0, len(self.env.current_task.push_objects) - 1)
+        obj, _ = self.env.current_task.get_object_and_area_with_same_id(id)
+
+        # Get the object pose
+        obj_pose = self.env.get_pose(obj.unique_id)
+
+        # Convert object pose to normalized action between [-1 1]
+        x_range = self.env.movement_bounds[0][1] - self.env.movement_bounds[0][0]
+        y_range = self.env.movement_bounds[1][1] - self.env.movement_bounds[1][0] 
+        action[0] = 2 * ((obj_pose.translation[0] - self.env.movement_bounds[0][0]) / x_range) - 1
+        action[1] = 2 * ((obj_pose.translation[1] - self.env.movement_bounds[1][0]) / y_range) - 1
+
+        logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pose}")
+
+        # Reduce epsilon after each training step
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+        
+        return action
 
 class DQNAgent:
-    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4), weights_path="", weights_dir="models/best"):
+    def __init__(self, action_dim, supervisor, epsilon=1.0, epsilon_min=1.0, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4), weights_path="", weights_dir="models/best"):
         self.action_dim = action_dim
+        self.supervisor = supervisor
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
@@ -133,7 +172,7 @@ class DQNAgent:
                 weights_file_path = os.path.join(weights_dir, weights_path)
                 self.model.load_weights(weights_file_path)
                 logger.debug(f"Loaded weights from {weights_file_path}")
-                self.epsilon = 0.5 # expectation is that the model is already trained but ReplayBuffer is empty
+                self.epsilon = 0.1 # expectation is that the model is already trained but ReplayBuffer is empty
                 logger.debug(f"Setting epsilon to {self.epsilon}")
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
@@ -147,8 +186,12 @@ class DQNAgent:
     def get_action(self, state, training=True):
         if training and np.random.random() < self.epsilon:
             # Random action in continuous space
-            logger.debug(f"Random action taken with {self.epsilon}")
-            return np.random.uniform(-1, 1, self.action_dim)
+            #logger.debug(f"Random action taken with {self.epsilon}")
+            #return np.random.uniform(-1, 1, self.action_dim)
+
+            # Ask supervisor for action
+            logger.debug(f"Supervisor asked for action with epsilon {self.epsilon}")
+            return self.supervisor.ask_supervisor()
 
         state = np.expand_dims(state, axis=0)
         # Direct continuous output from network
@@ -259,6 +302,7 @@ def main(cfg: DictConfig) -> None:
         distance_reward_scale=cfg.distance_reward_scale,
         iou_reward_scale=cfg.iou_reward_scale,  # Pass the parameter
         no_movement_threshold=cfg.no_movement_threshold,
+        max_moves_without_positive_reward=cfg.max_moves_without_positive_reward,
     )
 
     logger.info("Instantiation completed.")
@@ -266,7 +310,9 @@ def main(cfg: DictConfig) -> None:
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
     input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
-    agent = DQNAgent(action_dim, input_shape=input_shape, weights_path=cfg.weights_path, weights_dir=cfg.weights_dir)
+    supervisor = DQNSupervisor(action_dim, env)
+    logger.info("Supervisor initialized.")
+    agent = DQNAgent(action_dim, supervisor=supervisor, input_shape=input_shape, weights_path=cfg.weights_path, weights_dir=cfg.weights_dir)
     logger.info("DQN agent initialized.")
     replay_buffer = PrioritizedReplayBuffer()
     logger.info("Replay buffer initialized.")
