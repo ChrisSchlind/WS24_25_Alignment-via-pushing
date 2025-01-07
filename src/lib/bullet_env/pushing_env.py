@@ -279,7 +279,7 @@ class PushingEnv(BulletEnv):
 
         # Punishment for not moving object or increasing IoU
         if self.moves_without_positive_reward >= self.max_moves_without_positive_reward:
-            penalty = 100 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) # increase penalty for every step after max_moves_without_positive_reward
+            penalty = 20 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) * 5 # increase penalty for every step after max_moves_without_positive_reward
             total_reward -= penalty
             logger.debug(f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps.")
 
