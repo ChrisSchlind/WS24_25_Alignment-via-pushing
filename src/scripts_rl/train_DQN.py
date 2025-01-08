@@ -109,7 +109,7 @@ class PrioritizedReplayBuffer:
         return len(self.buffer)
     
 class DQNSupervisor:
-    def __init__(self, action_dim, env, workspace_bounds, min_obj_area_threshold=0.1, max_obj_area_threshold=0.6, extra_distance=0.05):
+    def __init__(self, action_dim, env, workspace_bounds, min_obj_area_threshold=0.04, max_obj_area_threshold=0.6, extra_distance=0.05):
         self.action_dim = action_dim
         self.env = env
         self.workspace_bounds = workspace_bounds
