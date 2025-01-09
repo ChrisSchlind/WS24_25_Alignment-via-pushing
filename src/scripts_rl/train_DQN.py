@@ -226,22 +226,21 @@ class DQNSupervisor:
             obj_pose = self.env.get_pose(obj.unique_id)
             obj_pos = obj_pose.translation[:2]
 
-            # Movement/Distance&Direction between object and TCP
+            # Movement/Distance&Direction between TCP and object
             movement = obj_pos - tcp_pos
-            random_distance_scaling_factor = random.uniform(0.75, 1.25)
 
             # if movement is too small, take an action weighted to the side of the object
             logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {self.sv_90deg_movement_threshold}")
             if np.linalg.norm(movement) < (self.sv_90deg_movement_threshold * random.uniform(0.95, 1.25)):
                 logger.debug(f"Supervisor said: TCP close to object, making a mvt. 90° to the side * randomDistanceFactor")
-                movement = np.array([movement[1], -movement[0]]) * random_distance_scaling_factor
+                movement = np.array([movement[1], -movement[0]]) * random.uniform(0.75, 1.25)
 
             # Normalize movement, normalize over workspace bounds
             # ATTENTION: X and Y are swapped because of the camera orientation
             x_range = self.env.workspace_bounds[0][1] - self.env.workspace_bounds[0][0]
             y_range = self.env.workspace_bounds[1][1] - self.env.workspace_bounds[1][0]
-            action[0] = 2 * (movement[1] / x_range) * random_distance_scaling_factor
-            action[1] = 2 * (movement[0] / y_range) * random_distance_scaling_factor
+            action[0] = 2 * (movement[1] / x_range) * random.uniform(0.8, 1.2)
+            action[1] = 2 * (movement[0] / y_range) * random.uniform(0.8, 1.2)
 
         # -----------------------------------------------------------------------------------------------------------------------------------------------
 
