@@ -232,7 +232,7 @@ class DQNSupervisor:
 
             # if movement is too small, take an action weighted to the side of the object
             logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {self.sv_90deg_movement_threshold}")
-            if np.linalg.norm(movement) < self.sv_90deg_movement_threshold:
+            if np.linalg.norm(movement) < (self.sv_90deg_movement_threshold * random.uniform(0.95, 1.25)):
                 logger.debug(f"Supervisor said: TCP close to object, making a mvt. 90° to the side * randomDistanceFactor")
                 movement = np.array([movement[1], -movement[0]]) * random_distance_scaling_factor
 
