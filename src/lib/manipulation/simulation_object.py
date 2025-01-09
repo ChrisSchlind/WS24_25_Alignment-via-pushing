@@ -25,6 +25,7 @@ class SceneObject:
     :var bool static: indicates whether the object can be moved
     :var Affine pose: 6D pose of the object
     :var float min_dist: encompassing radius, for non-overlapping object placement
+    :var int sym_axis: number of symmetry axis of the object
     :var Affine offset: offset of object origin and its base, to avoid placing object into the ground
     :var int unique_id: unique id of object that was generated while task generation. It is used in objectives.
     """
@@ -34,5 +35,6 @@ class SceneObject:
     static: bool = True
     pose: np.ndarray = field(default_factory=lambda: np.eye(4))
     min_dist: float = 0
+    sym_axis: int = -1
     offset: np.ndarray = field(default_factory=lambda: np.eye(4))
     unique_id: int = -1
