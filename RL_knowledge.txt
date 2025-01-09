@@ -66,6 +66,12 @@ Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve
         1. Actions liegen nahe bei 0 oder sind 0: Netz hat keine Policy gefunden, nichts tun liefert tolerierbare Bestrafung, hoher kumulierter negativer Reward über alle Episoden
         2. Actions liegen nahe bei 1 oder sind 1: Netz hat keine Policy gefunden, nichts tun liefert tolerierbare Bestrafung, hoher kumulierter positiver Reward über alle Episoden
         3. Actions werden Situationsabhängig predictet: Netz hat eine verwendbare Policy gefunden, kumulierter Reward ist ausgeglichen und aussagekräftig für gewünschtes Ziel
+    - Reward_Range für die Reward Normalisierung im PrioritizedReplayBuffer hat direkten Einfluss auf Konvergenzrichtung und Geschwindigkeit der Aktionen des Agenten:
+        [-1.0, 1.0]: Netz konvergiert langsam Richtung -1, über 50 Epochen erreicht es ein Minimum bei den predicteten Actions von ca. -10
+        [-10.0, 10.0]: Netz konvergiert binnen einer Epochen Richtung -1, Über 10 Epochen erreicht es ein Minimum bei den predicteten Actions von ca. -10
+        [-0.1, 0.1]: Netz konvergiert (hoffentlich) vieler langsamer und kann vorher policy lernen --> aktuelle Einstellung
+        ==> Positiver Gesamtreward: Netz konvergiert gegen minus Unendlich
+        ==> Negativer Gesamtreward: Netz konvergiert gegen plus Unendlich
 
 Muss noch bestätigt werden:
     - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
