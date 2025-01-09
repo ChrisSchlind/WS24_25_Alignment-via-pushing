@@ -26,7 +26,8 @@ class PushingEnv(BulletEnv):
         iou_reward_scale,  # Add this parameter
         no_movement_threshold,
         max_moves_without_positive_reward,
-        success_threshold=0.05,
+        success_threshold_trans=0.01,
+        succes_threshold_rot=0.01,
         max_steps=200,
         coordinate_axes_urdf_path=None,
     ):
@@ -37,7 +38,8 @@ class PushingEnv(BulletEnv):
         self.workspace_bounds = workspace_bounds
         self.movement_bounds = movement_bounds
         self.step_size = step_size
-        self.success_threshold = success_threshold
+        self.success_threshold_trans = success_threshold_trans
+        self.success_threshold_rot = succes_threshold_rot
         self.max_steps = max_steps
         self.current_step = 0
         self.current_task = None
@@ -364,7 +366,7 @@ class PushingEnv(BulletEnv):
             self.moves_without_positive_reward += 1        
         """
 
-        return total_reward
+        return -(total_reward)
 
     def _check_done(self):
         """Check if episode should end"""
@@ -372,14 +374,21 @@ class PushingEnv(BulletEnv):
         if self.current_step >= self.max_steps:
             return True
 
-        # Check if all objects are in their areas
+        # Check if all objects are in their areas with the correct orientation
         for i in range(len(self.current_task.push_objects)):
             obj, area = self.current_task.get_object_and_area_with_same_id(i)
             obj_pos = self.get_pose(obj.unique_id).translation[:2]
             area_pos = self.get_pose(area.unique_id).translation[:2]
 
-            if np.linalg.norm(obj_pos - area_pos) > self.success_threshold:
+            if np.linalg.norm(obj_pos - area_pos) > self.success_threshold_trans:
+                logger.debug(f"Object {i} is not in its area with {np.linalg.norm(obj_pos - area_pos):.2f} distance.")
                 return False
+            
+            if not self._check_object_to_area_rotation(obj, area):
+                logger.debug(f"Object {i} is not aligned with its area.")
+                return False
+            
+        logger.debug("All objects are in their areas.")
 
         # All objects are aligned
         return True
@@ -404,6 +413,49 @@ class PushingEnv(BulletEnv):
 
         return True
 
+    def _calculate_angle_between_rotations(self, rot1, rot2):
+        """
+        Calculate the angle between two rotation matrices.
+
+        :param rot1: Rotation matrix of the object (3x3)
+        :param rot2: Rotation matrix of the area (3x3)
+        :return: Angle in degrees
+        """
+        # Relative rotation matrix
+        relative_rot = np.dot(np.linalg.inv(rot1), rot2)
+        
+        # Extract the angle from the trace of the relative rotation matrix
+        angle_rad = np.arccos((np.trace(relative_rot) - 1) / 2)
+        
+        # Convert to degrees
+        angle_deg = np.degrees(angle_rad)
+        return angle_deg
+    
+    def _check_object_to_area_rotation(self, obj, area):
+        """
+        Check if the object is aligned with the area.
+
+        :param obj: Object to check
+        :param area: Area to check
+        :return: True if aligned, False otherwise
+        """
+        obj_rot = self.get_pose(obj.unique_id).rotation
+        area_rot = self.get_pose(area.unique_id).rotation
+        angle = self._calculate_angle_between_rotations(obj_rot, area_rot)
+
+        # Use symmetry axis of object
+        if obj.sym_axis > 0:
+            angle = (angle % int(180 / obj.sym_axis))
+        else: # e.g. round objects have inf. symmetry axis and are always aligned with the area, check value is -1
+            return True
+
+        if obj.sym_axis == 1:
+            logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min/max: {0.00:.2f} degrees")
+            return angle <= self.success_threshold_rot
+        else:
+            logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min: {0.00:.2f} and max: {180.0 / obj.sym_axis:.2f} degrees")
+            return angle <= self.success_threshold_rot or ((180.0 / obj.sym_axis) - angle) <= self.success_threshold_rot # Check if angle is within threshold for both directions
+
     def render(self):
         """Return the current camera view"""
         return self._get_observation()
@@ -411,7 +463,7 @@ class PushingEnv(BulletEnv):
     def close(self):
         """Close the environment"""
         self.bullet_client.disconnect()
-        logger.debug("Environment closed.")
+        logger.debug("Environment closed.")  
 
     def calculate_iou(self, mask1, mask2):
         """Calculate Intersection over Union (IoU) between two binary masks."""
