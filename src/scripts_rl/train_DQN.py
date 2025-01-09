@@ -37,7 +37,8 @@ class ConvDQN(tf.keras.Model):
         x = self.fc2(x)
         # Output in [-1,1]
         return tf.nn.tanh(x)
-    
+
+
 class PrioritizedReplayBuffer:
     def __init__(self, capacity=10000, alpha=0.6):
         # Standard replay buffer
@@ -69,7 +70,8 @@ class PrioritizedReplayBuffer:
         reward_min = 0
         reward_max = 0
 
-        while (reward_min == 0 and reward_max == 0) or reward_min == reward_max: # Avoid division by zero, sample again
+        i = 0
+        while (reward_min == 0 and reward_max == 0) or reward_min == reward_max:  # Avoid division by zero, sample again
             # Select experiences based on priorities
             indices = np.random.choice(len(self.buffer), batch_size, p=prob_dist)
 
@@ -88,14 +90,28 @@ class PrioritizedReplayBuffer:
 
             if (reward_min == 0 and reward_max == 0) or reward_min == reward_max:
                 logger.debug("Resampling due to zero rewards.")
+                logger.debug(f"i={i}")
+                if i > 100:  ## Testing by Luis, if too many resampling attempts, return -1 norm. rewards
+                    logger.info("Resampling failed after 100 attempts, returning neutral values.")
+                    # set rewards to small random values
+                    rewards_normalized = np.ones(batch_size) * 0
+
+                    logger.debug(f"Normalized Rewards: {rewards_normalized}")
+                    logger.info(f"norm. rewardSum: {np.sum(rewards_normalized)}")
+
+                    return states, actions, rewards_normalized, next_states, dones, indices, weights
+
+            i += 1
 
         # Normalize the rewards to the desired range
         # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
         reward_min_new, reward_max_new = reward_range
+
         rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
 
         logger.debug(f"Rewards: {rewards}")
         logger.debug(f"Normalized Rewards: {rewards_normalized}")
+        logger.debug(f"norm. rewardSum: {np.sum(rewards_normalized)}")
 
         return states, actions, rewards_normalized, next_states, dones, indices, weights
 
@@ -107,19 +123,29 @@ class PrioritizedReplayBuffer:
 
     def size(self):
         return len(self.buffer)
-    
+
+
 class DQNSupervisor:
-    def __init__(self, action_dim, env, workspace_bounds, min_obj_area_threshold=0.04, max_obj_area_threshold=0.6, extra_distance=0.05):
+    def __init__(
+        self,
+        action_dim,
+        env,
+        workspace_bounds,
+        min_obj_area_threshold=0.04,
+        max_obj_area_threshold=0.6,
+        extra_distance=0.05,
+        sv_90deg_movement_threshold=0.1,
+    ):
         self.action_dim = action_dim
         self.env = env
         self.workspace_bounds = workspace_bounds
         self.min_obj_area_threshold = min_obj_area_threshold
         self.max_obj_area_threshold = max_obj_area_threshold
         self.extra_distance = extra_distance
+        self.sv_90deg_movement_threshold = sv_90deg_movement_threshold 
         self.last_id = 0
 
     def ask_supervisor(self):
-        
         # Initialize action
         action = np.zeros(self.action_dim)
 
@@ -127,57 +153,116 @@ class DQNSupervisor:
         id = 0
         while_loop = True
 
-        # Check if one object got positive reward last step otherwise take a random object under the condition that it is not the same object as last step
-        for i in range(len(self.env.current_task.push_objects)):
-            if self.env.absolute_distances[i] > 0 and self.env.distance_rewards[i] > 0:
-                id = i
-                while_loop = False
-        
-        # Randomly select an object
-        while id == self.last_id and while_loop == True: # Ensure that the same object is not selected twice
-            id = random.randint(0, len(self.env.current_task.push_objects) - 1)
+        # -------------------------------------------------------------------------------------------------------------------------------------------------
+        # ABSOLUT MOVEMENTS     ---------------------------------------------------------------------------------------------------------------------------
+        if self.env.absolut_movement == True:
 
-            if len(self.env.current_task.push_objects) == 1: # If only one object, than that's the only option
-                break
+            # Check if one object got positive reward last step otherwise take a random object under the condition that it is not the same object as last step
+            for i in range(len(self.env.current_task.push_objects)):
+                if self.env.absolute_obj_area_distances[i] > 0 and self.env.distance_obj_area_rewards[i] > 0:
+                    id = i
+                    while_loop = False
+                if self.env.absolute_TCP_obj_distances[i] > 0 and self.env.distance_TCP_obj_rewards[i] > 0:
+                    id = i
+                    while_loop = False
 
-        self.last_id = id
-        obj, area = self.env.current_task.get_object_and_area_with_same_id(id)
+            # Randomly select an object
+            while id == self.last_id and while_loop == True:  # Ensure that the same object is not selected twice
+                id = random.randint(0, len(self.env.current_task.push_objects) - 1)
 
-        # Get the object and area pose
-        obj_pose = self.env.get_pose(obj.unique_id)
-        area_pose = self.env.get_pose(area.unique_id)
-        obj_pos = obj_pose.translation[:2]
-        area_pos = area_pose.translation[:2]
+                if len(self.env.current_task.push_objects) == 1:  # If only one object, than that's the only option
+                    break
 
-        # Check if object is already in area or too far away
-        dist = np.linalg.norm(obj_pos - area_pos)
-        if dist <= self.min_obj_area_threshold or dist >= self.max_obj_area_threshold:
-            logger.debug(f"Supervisor said: Random action because object with distance {dist} is already in area or too far away.")
-            return np.random.uniform(-1, 1, self.action_dim)
-        
-        # Check if object is outside of workspace, than it is not good to push it because we will only risk to push it off the table
-        if not (
+            self.last_id = id
+            obj, area = self.env.current_task.get_object_and_area_with_same_id(id)
+
+            # Get the object and area pose
+            obj_pose = self.env.get_pose(obj.unique_id)
+            area_pose = self.env.get_pose(area.unique_id)
+            obj_pos = obj_pose.translation[:2]
+            area_pos = area_pose.translation[:2]
+
+            # Check if object is outside of workspace, than it is not good to push it because we will only risk to push it off the table
+            if not (
                 (self.workspace_bounds[0][0] - self.extra_distance) <= obj_pose.translation[0] <= (self.workspace_bounds[0][1] + self.extra_distance)
-                and (self.workspace_bounds[1][0] - self.extra_distance) <= obj_pose.translation[1] <= (self.workspace_bounds[1][1] + self.extra_distance)
-        ):
-            logger.debug(f"Supervisor said: Random action because object is outside of workspace.")
-            return np.random.uniform(-1, 1, self.action_dim)
+                and (self.workspace_bounds[1][0] - self.extra_distance)
+                <= obj_pose.translation[1]
+                <= (self.workspace_bounds[1][1] + self.extra_distance)
+            ):
+                logger.debug(f"Supervisor said: Random action because object is outside of workspace.")
+                return np.random.uniform(-1, 1, self.action_dim)
 
-        # Convert object pose to normalized action between [-1 1]
-        x_range = self.env.movement_bounds[0][1] - self.env.movement_bounds[0][0]
-        y_range = self.env.movement_bounds[1][1] - self.env.movement_bounds[1][0] 
-        action[0] = 2 * ((obj_pose.translation[0] - self.env.movement_bounds[0][0]) / x_range) - 1
-        action[1] = 2 * ((obj_pose.translation[1] - self.env.movement_bounds[1][0]) / y_range) - 1
+            # Check if object is already in area or too far away
+            dist = np.linalg.norm(obj_pos - area_pos)
+            if dist <= self.min_obj_area_threshold or dist >= self.max_obj_area_threshold:
+                logger.debug(f"Supervisor said: Random action because object with distance {dist} is already in area or too far away.")
+                return np.random.uniform(-1, 1, self.action_dim)
+
+            # Convert object pose to normalized action between [-1 1]
+            x_range = self.env.movement_bounds[0][1] - self.env.movement_bounds[0][0]
+            y_range = self.env.movement_bounds[1][1] - self.env.movement_bounds[1][0]
+            action[0] = 2 * ((obj_pose.translation[0] - self.env.movement_bounds[0][0]) / x_range) - 1
+            action[1] = 2 * ((obj_pose.translation[1] - self.env.movement_bounds[1][0]) / y_range) - 1
+
+        # -----------------------------------------------------------------------------------------------------------------------------------------------
+        # RELATIVE MOVEMENTS  ---------------------------------------------------------------------------------------------------------------------------
+        else:
+            # Calculate movement towards the object
+            tcp_pose = self.env.get_tcp_pose()
+            tcp_pos = tcp_pose.translation[:2]
+
+            # Check for the nearest object to the TCP
+            min_distance = float("inf")
+            for i in range(len(self.env.current_task.push_objects)):
+                obj, area = self.env.current_task.get_object_and_area_with_same_id(i)
+                obj_pose = self.env.get_pose(obj.unique_id)
+                obj_pos = obj_pose.translation[:2]
+                dist = np.linalg.norm(obj_pos - tcp_pos)
+                if dist < min_distance:
+                    min_distance = dist
+                    id = i
+
+            obj, area = self.env.current_task.get_object_and_area_with_same_id(id)
+            obj_pose = self.env.get_pose(obj.unique_id)
+            obj_pos = obj_pose.translation[:2]
+
+            # Movement/Distance&Direction between object and TCP
+            movement = obj_pos - tcp_pos
+
+            # if movement is too small, take an action weighted to the side of the object
+            logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {self.sv_90deg_movement_threshold}")
+            if np.linalg.norm(movement) < self.sv_90deg_movement_threshold:
+                logger.debug(f"Supervisor said: TCP close to object, making a mvt. 90° to the side * randomDistanceFactor.")
+                random_distance_scaling_factor = random.uniform(0.75, 1.25)
+                movement = np.array([movement[1], -movement[0]]) * random_distance_scaling_factor
+
+            # Normalize movement, normalize over workspace bounds
+            # ATTENTION: X and Y are swapped because of the camera orientation
+            x_range = self.env.workspace_bounds[0][1] - self.env.workspace_bounds[0][0]
+            y_range = self.env.workspace_bounds[1][1] - self.env.workspace_bounds[1][0]
+            action[1] = 2 * (movement[0] / x_range)
+            action[0] = 2 * (movement[1] / y_range)
 
         # Clip action between [-1 1], needed for objects that are pushed off the table and now lie outside of workspace in the void
         action = np.clip(action, -1, 1)
 
         logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pose}")
-        
+
         return action
 
+
 class DQNAgent:
-    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4), weights_path="", weights_dir="models/best"):
+    def __init__(
+        self,
+        action_dim,
+        epsilon=0.8,
+        epsilon_min=0.1,
+        epsilon_decay=0.9999,
+        gamma=0.99,
+        input_shape=(84, 84, 4),
+        weights_path="",
+        weights_dir="models/best",
+    ):
         self.action_dim = action_dim
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
@@ -201,7 +286,7 @@ class DQNAgent:
                 weights_file_path = os.path.join(weights_dir, weights_path)
                 self.model.load_weights(weights_file_path)
                 logger.debug(f"Loaded weights from {weights_file_path}")
-                self.epsilon = 0.4 # expectation is that the model is already trained but ReplayBuffer is empty
+                self.epsilon = 0.4  # expectation is that the model is already trained but ReplayBuffer is empty
                 logger.debug(f"Setting epsilon to {self.epsilon}")
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
@@ -224,11 +309,13 @@ class DQNAgent:
 
         # Ensure actions are in [-1,1] range
         return np.clip(action, -1, 1)
-    
+
     def train(self, replay_buffer, batch_size=32, beta=0.4):
         # Check if the replay buffer is of the correct type
         if not isinstance(replay_buffer, PrioritizedReplayBuffer):
-            raise TypeError("The replay buffer used must be an instance of PrioritizedReplayBuffer. Change replay_buffer in main from ReplayBuffer to PrioritizedReplayBuffer or use train method.")
+            raise TypeError(
+                "The replay buffer used must be an instance of PrioritizedReplayBuffer. Change replay_buffer in main from ReplayBuffer to PrioritizedReplayBuffer or use train method."
+            )
 
         if replay_buffer.size() < batch_size:
             return
@@ -236,8 +323,8 @@ class DQNAgent:
         # Sample a batch from the prioritized replay buffer
         states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-1.0, 1.0))
 
-        #logger.debug(f"Actions: {actions}")
-        #logger.debug(f"Rewards: {rewards}")
+        # logger.debug(f"Actions: {actions}")
+        # logger.debug(f"Rewards: {rewards}")
 
         # Calculate target values for Q-learning
         targets = self.target_model(states).numpy()
@@ -268,15 +355,17 @@ class DQNAgent:
         # Apply the Importance Sampling Weights
         weighted_loss = weights * loss  # TensorFlow computation, maintaining the gradient flow
 
-        #logger.debug(f"Weights: {weights}")
-        #logger.debug(f"Weighted Loss: {weighted_loss}")
+        # logger.debug(f"Weights: {weights}")
+        # logger.debug(f"Weighted Loss: {weighted_loss}")
 
         # Check if any gradients are None
         grads = tape.gradient(loss, self.model.trainable_variables)
 
         # Debugging the gradients
         if any(grad is None for grad in grads):
-            logger.error(f"Gradients are None for the following layers: {[var.name for var, grad in zip(self.model.trainable_variables, grads) if grad is None]}")
+            logger.error(
+                f"Gradients are None for the following layers: {[var.name for var, grad in zip(self.model.trainable_variables, grads) if grad is None]}"
+            )
             raise ValueError("One or more gradients are None!")
 
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
@@ -324,7 +413,8 @@ def main(cfg: DictConfig) -> None:
         gripper_offset=cfg.gripper_offset,
         fixed_z_height=cfg.fixed_z_height,
         absolut_movement=cfg.absolut_movement,
-        distance_reward_scale=cfg.distance_reward_scale,
+        distance_TCP_obj_reward_scale=cfg.distance_TCP_obj_reward_scale,
+        distance_obj_area_reward_scale=cfg.distance_obj_area_reward_scale,
         iou_reward_scale=cfg.iou_reward_scale,  # Pass the parameter
         no_movement_threshold=cfg.no_movement_threshold,
         max_moves_without_positive_reward=cfg.max_moves_without_positive_reward,
@@ -335,7 +425,9 @@ def main(cfg: DictConfig) -> None:
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
     input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
-    supervisor = DQNSupervisor(action_dim, env, workspace_bounds=cfg.workspace_bounds)
+    supervisor = DQNSupervisor(
+        action_dim, env, workspace_bounds=cfg.workspace_bounds, sv_90deg_movement_threshold=cfg.supervisor.sv_90deg_movement_threshold
+    )
     agent = DQNAgent(action_dim, input_shape=input_shape, weights_path=cfg.weights_path, weights_dir=cfg.weights_dir)
     logger.info("DQN supervisor and DQN agent initialized.")
     replay_buffer = PrioritizedReplayBuffer()
@@ -351,7 +443,7 @@ def main(cfg: DictConfig) -> None:
         episode_reward = 0
 
         # Adjust max steps per episode for the first few episodes to improve learning speed
-        if cfg.weights_path: # if pretrained model is loaded, use max steps from config
+        if cfg.weights_path:  # if pretrained model is loaded, use max steps from config
             max_steps = cfg.max_steps_per_episode
         else:
             max_steps = min(cfg.max_steps_per_episode, (episode + 1) * 10)
@@ -361,7 +453,7 @@ def main(cfg: DictConfig) -> None:
             action = agent.get_action(state, supervisor)
 
             # Get next state using environment's step function
-            next_state, reward, done, _ , failed = env.step(action)
+            next_state, reward, done, _, failed = env.step(action)
 
             replay_buffer.put(state, action, reward, next_state, done)
 
@@ -398,27 +490,32 @@ def main(cfg: DictConfig) -> None:
     env.close()
     logger.debug("Training completed.")
 
+
 def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
     # Create the figure and the first y-axis
     fig, ax1 = plt.subplots()
 
     # Plot the rewards on the first y-axis
     ax1.plot(rewards, label="Reward", color="tab:blue")
-    ax1.set_xlabel('Episode')
-    ax1.set_ylabel('Reward', color="tab:blue")
-    ax1.tick_params(axis='y', labelcolor="tab:blue")
+    ax1.set_xlabel("Episode")
+    ax1.set_ylabel("Reward", color="tab:blue")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
 
     # Create the second y-axis that shares the same x-axis
     ax2 = ax1.twinx()
 
     # Plot the epsilons on the second y-axis
     ax2.plot(epsilons, label="Epsilon", color="tab:orange")
-    ax2.set_ylabel('Epsilon', color="tab:orange")
-    ax2.tick_params(axis='y', labelcolor="tab:orange")
+    ax2.set_ylabel("Epsilon", color="tab:orange")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
 
     # Add the legend
-    ax1.legend(loc='upper left')
-    ax2.legend(loc='upper right')
+    ax1.legend(loc="upper left")
+    ax2.legend(loc="upper right")
+
+    # test if plot_dir exists, if not create it
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
 
     # Save the plot image
     plt.tight_layout()  # Avoid cutting off labels

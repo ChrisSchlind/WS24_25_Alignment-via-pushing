@@ -21,7 +21,8 @@ class PushingEnv(BulletEnv):
         gripper_offset,
         fixed_z_height,
         absolut_movement,
-        distance_reward_scale,
+        distance_TCP_obj_reward_scale,
+        distance_obj_area_reward_scale,
         iou_reward_scale,  # Add this parameter
         no_movement_threshold,
         max_moves_without_positive_reward,
@@ -44,7 +45,8 @@ class PushingEnv(BulletEnv):
         self.fixed_z_height = fixed_z_height
         self.movement_punishment = False
         self.absolut_movement = absolut_movement
-        self.distance_reward_scale = distance_reward_scale
+        self.distance_TCP_obj_reward_scale = distance_TCP_obj_reward_scale
+        self.distance_obj_area_reward_scale = distance_obj_area_reward_scale
         self.iou_reward_scale = iou_reward_scale  # Initialize the attribute
         self.no_movement_threshold = no_movement_threshold
         self.max_moves_without_positive_reward = max_moves_without_positive_reward
@@ -55,9 +57,12 @@ class PushingEnv(BulletEnv):
         self.old_eef_pos = None
         self.debug = debug
         self.moves_without_positive_reward = 0
-        self.absolute_distances = []
-        self.distance_rewards = []
-        
+        self.absolute_TCP_obj_distances = []
+        self.distance_TCP_obj_rewards = []
+        self.absolute_obj_area_distances = []
+        self.distance_obj_area_rewards = []
+        self.absolute_distance_TCP_obj_last = []  # Initialize the attribute
+
     def reset(self):
         """Reset environment and return initial state"""
         # Clean up previous task if exists
@@ -72,9 +77,15 @@ class PushingEnv(BulletEnv):
         self.current_task = self.task_factory.create_task()
         self.current_task.setup(self)
 
-        # Reset robot position
-        self.robot.home()
-        start_pose = Affine(translation=[0.35, -0.25, self.fixed_z_height])
+        # start pose = a random position in the workspace
+        start_pose = Affine(
+            translation=[
+                np.random.uniform(self.workspace_bounds[0][0], self.workspace_bounds[0][1]),
+                np.random.uniform(self.workspace_bounds[1][0], self.workspace_bounds[1][1]),
+                self.fixed_z_height,
+            ]
+        )
+
         start_pose = start_pose * self.gripper_offset
         self.robot.ptp(start_pose)
 
@@ -87,8 +98,11 @@ class PushingEnv(BulletEnv):
             self.old_dist.append(0.0)
             self.iou_list.append(0.0)
             self.old_iou.append(0.0)
-            self.absolute_distances.append(0.0)
-            self.distance_rewards.append(0.0)
+            self.absolute_TCP_obj_distances.append(0.0)
+            self.distance_TCP_obj_rewards.append(0.0)
+            self.absolute_obj_area_distances.append(0.0)
+            self.distance_obj_area_rewards.append(0.0)
+            self.absolute_distance_TCP_obj_last.append(0.0)  # Initialize the attribute
 
         # Reset eef pose
         self.old_eef_pos = self.robot.get_eef_pose().translation[:2]
@@ -204,11 +218,12 @@ class PushingEnv(BulletEnv):
         positive_reward_flag = False
         logger.debug(f"Calculating reward for step {self.current_step}")
 
-        '''
+        """
         REWARDS:
-        1. Distance-based reward
+        1. Distance-based reward of object to area
         2. IoU-based reward
-        '''
+        3. if(relativBewegungen): Distance-based reward of TCP to object
+        """
 
         for i in range(len(self.current_task.push_objects)):
             # Current objects and areas
@@ -216,52 +231,106 @@ class PushingEnv(BulletEnv):
             obj_pose = self.get_pose(obj.unique_id)
             area_pose = self.get_pose(area.unique_id)
 
-            # Distance-based reward
+            # ******************************************************************
+            # Distance-based reward of object to area
             obj_pos = obj_pose.translation[:2]
             area_pos = area_pose.translation[:2]
             self.dist_list[i] = np.linalg.norm(obj_pos - area_pos)
 
             # Calculate reward based on distance between current and previous step
+            absolute_distance_obj_area = round((self.old_dist[i] - self.dist_list[i]), 3)  # Ensure assignment
+
             if self.current_step != 1:  # Skip first step because there is no previous step
-                absolute_distance = round((self.old_dist[i] - self.dist_list[i]), 3)
-                
-                if absolute_distance > 0: # ignore negative movement, only reward positive movement
-                    current_reward = absolute_distance * self.distance_reward_scale
-                    self.moves_without_positive_reward = 0 # reset counter
+                if absolute_distance_obj_area > 0:  # ignore negative movement, only reward positive movement
+                    current_reward = absolute_distance_obj_area * self.distance_obj_area_reward_scale
+                    self.moves_without_positive_reward = 0  # reset counter
                     positive_reward_flag = True
                 else:
-                    current_reward = 0.0
+                    if absolute_distance_obj_area < 0:
+                        current_reward = (
+                            absolute_distance_obj_area * self.distance_obj_area_reward_scale * 0.25
+                        )  # "* 0.25" = reduced punishment for negative movements to motivate movements nontheless
+                    else:
+                        current_reward = 0.0
 
                 total_reward += round(current_reward, 2)
-                logger.debug(f"Distance reward for object {i}: {round(current_reward, 2)}")
+                if current_reward != 0:
+                    logger.info(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
+                else:
+                    logger.debug(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
 
                 # Save distances and reward for DQNSupervisor
-                self.absolute_distances[i] = absolute_distance
-                self.distance_rewards[i] = current_reward
+                self.absolute_obj_area_distances[i] = absolute_distance_obj_area
+                self.distance_obj_area_rewards[i] = current_reward
 
+            # ******************************************************************
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
             if self.current_step != 1:
                 IOU = self.get_objects_intersection_volume(obj.unique_id, area.unique_id)
-                #relative_iou = IOU - self.old_iou[i]
-                absolute_iou = IOU * 10e6 # scale IoU to be greater than 0.1, currently all IoU values are XXXXe-09
+                # relative_iou = IOU - self.old_iou[i]
+                absolute_iou = IOU * 10e6  # scale IoU to be greater than 0.1, currently all IoU values are XXXXe-09
                 total_reward += round(absolute_iou * self.iou_reward_scale, 2)
                 if absolute_iou > 0:
-                    self.moves_without_positive_reward = 0 # reset counter
+                    self.moves_without_positive_reward = 0  # reset counter
                     positive_reward_flag = True
                 logger.debug(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
 
+            # ******************************************************************
+            # Distance-based reward of TCP to object, only when relative movements are set up
+            if self.absolut_movement == False:
+                tcp_pos = self.robot.get_eef_pose().translation[:2]
+                obj_pos = obj_pose.translation[:2]
+
+                # Calculate reward if the TCP got closer to any of the objects
+                absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
+
+                if self.current_step == 1:  # Initialize during the first step
+                    self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
+
+                # Delta = new distance - last distance
+                absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
+                self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
+
+                if absolute_distance_delta < 0:  # if distance got closer, good, reward it
+                    current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                    self.moves_without_positive_reward = 0  # reset counter
+                    positive_reward_flag = True
+                    # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
+                else:
+                    if absolute_distance_delta > 0:  # if distance got further, punish it
+                        current_reward = (
+                            -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                        )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth
+                        # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
+                    else:
+                        current_reward = 0.0
+
+                if current_reward != 0:
+                    logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+                else:
+                    logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+
+                # Save distances and reward for DQNSupervisor
+                self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
+                self.distance_TCP_obj_rewards[i] = current_reward
+
+        # Reward if the TCP came closer to any object
+        if self.current_step != 1:
+            # If the TCP got closer to any object, reward it (max reward is the highest reward of all objects)
+            total_reward += max(self.distance_TCP_obj_rewards)  # Add the highest reward of all objects
 
         # Copy current distance and IoU lists for next step
         self.old_dist = copy.deepcopy(self.dist_list)
-        self.old_iou = copy.deepcopy(self.iou_list)        
+        self.old_iou = copy.deepcopy(self.iou_list)
 
-        '''
+        """
         PUNISHMENTS:
         1. Moving outside movement bounds
         2. Not moving at all
         3. Not moving object or increasing IoU
-        '''
+        """
 
+        """
         # Punish for moving outside movement bounds
         if self.movement_punishment:
             total_reward -= 10.0
@@ -273,7 +342,7 @@ class PushingEnv(BulletEnv):
             total_reward -= 100.0
             logger.debug("Negative reward -100.0 given for not moving.")
         # No positive reward for moving because than the robot will just move around without any purpose
-
+        
         # Update old eef position
         self.old_eef_pos = copy.deepcopy(eef_pos)
 
@@ -286,6 +355,7 @@ class PushingEnv(BulletEnv):
         # if the agent is not moving an object or increasing the IoU, count up
         if not positive_reward_flag:
             self.moves_without_positive_reward += 1        
+        """
 
         return total_reward
 
@@ -306,7 +376,7 @@ class PushingEnv(BulletEnv):
 
         # All objects are aligned
         return True
-    
+
     def _check_objects(self, extra_distance=0.05):
         """Check if all the objects are inside the workspace bounds"""
         counter = 0
@@ -314,10 +384,12 @@ class PushingEnv(BulletEnv):
             obj = self.current_task.push_objects[i]
             obj_pos = self.get_pose(obj.unique_id).translation[:2]
 
-            if ((obj_pos[0] < (self.workspace_bounds[0][0] - extra_distance)) or 
-                (obj_pos[0] > (self.workspace_bounds[0][1] + extra_distance)) or 
-                (obj_pos[1] < (self.workspace_bounds[1][0] - extra_distance)) or 
-                (obj_pos[1] > (self.workspace_bounds[1][1] + extra_distance))):
+            if (
+                (obj_pos[0] < (self.workspace_bounds[0][0] - extra_distance))
+                or (obj_pos[0] > (self.workspace_bounds[0][1] + extra_distance))
+                or (obj_pos[1] < (self.workspace_bounds[1][0] - extra_distance))
+                or (obj_pos[1] > (self.workspace_bounds[1][1] + extra_distance))
+            ):
                 counter += 1
 
         if counter == len(self.current_task.push_objects):
@@ -341,6 +413,10 @@ class PushingEnv(BulletEnv):
         union = np.logical_or(mask1, mask2).sum()
         iou = intersection / union if union != 0 else 0
         return iou
+
+    def get_tcp_pose(self):
+        """Get the current pose of the TCP (Tool Center Point)"""
+        return self.robot.get_eef_pose()
 
 
 def get_object_mask(bullet_client, unique_id):

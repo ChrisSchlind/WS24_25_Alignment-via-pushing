@@ -14,13 +14,14 @@ from bullet_env.util import setup_bullet_client
 from bullet_env.pushing_env import PushingEnv
 
 # Initialize CUDA context
-gpus = tf.config.experimental.list_physical_devices('GPU')
+gpus = tf.config.experimental.list_physical_devices("GPU")
 if gpus:
     try:
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
     except RuntimeError as e:
         print(e)
+
 
 # Define the Convolutional Deep Q-Network (DQN) model
 class ConvDQN(tf.keras.Model):
@@ -39,6 +40,7 @@ class ConvDQN(tf.keras.Model):
         x = self.fc1(x)
         x = self.fc2(x)
         return tf.nn.tanh(x)
+
 
 # Define the Prioritized Replay Buffer
 class PrioritizedReplayBuffer:
@@ -98,9 +100,20 @@ class PrioritizedReplayBuffer:
     def size(self):
         return len(self.buffer)
 
+
 # Define the DQN Agent
 class DQNAgent:
-    def __init__(self, action_dim, epsilon=0.8, epsilon_min=0.1, epsilon_decay=0.9999, gamma=0.99, input_shape=(84, 84, 4), weights_path="", weights_dir="models/best"):
+    def __init__(
+        self,
+        action_dim,
+        epsilon=0.8,
+        epsilon_min=0.1,
+        epsilon_decay=0.9999,
+        gamma=0.99,
+        input_shape=(84, 84, 4),
+        weights_path="",
+        weights_dir="models/best",
+    ):
         self.action_dim = action_dim
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
@@ -122,7 +135,7 @@ class DQNAgent:
                 weights_file_path = os.path.join(weights_dir, weights_path)
                 self.model.load_weights(weights_file_path)
                 logger.debug(f"Loaded weights from {weights_file_path}")
-                self.epsilon = 0.5 # expectation is that the model is already trained but ReplayBuffer is empty
+                self.epsilon = 0.5  # expectation is that the model is already trained but ReplayBuffer is empty
                 logger.debug(f"Setting epsilon to {self.epsilon}")
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
@@ -140,11 +153,13 @@ class DQNAgent:
         state = np.expand_dims(state, axis=0)
         action = self.model(state)[0].numpy()
         return np.clip(action, -1, 1)
-    
+
     # Train the agent using experiences from the replay buffer
     def train(self, replay_buffer, batch_size=32, beta=0.4):
         if not isinstance(replay_buffer, PrioritizedReplayBuffer):
-            raise TypeError("The replay buffer used must be an instance of PrioritizedReplayBuffer. Change replay_buffer in main from ReplayBuffer to PrioritizedReplayBuffer or use train method.")
+            raise TypeError(
+                "The replay buffer used must be an instance of PrioritizedReplayBuffer. Change replay_buffer in main from ReplayBuffer to PrioritizedReplayBuffer or use train method."
+            )
 
         if replay_buffer.size() < batch_size:
             return
@@ -171,7 +186,9 @@ class DQNAgent:
 
         grads = tape.gradient(loss, self.model.trainable_variables)
         if any(grad is None for grad in grads):
-            logger.error(f"Gradients are None for the following layers: {[var.name for var, grad in zip(self.model.trainable_variables, grads) if grad is None]}")
+            logger.error(
+                f"Gradients are None for the following layers: {[var.name for var, grad in zip(self.model.trainable_variables, grads) if grad is None]}"
+            )
             raise ValueError("One or more gradients are None!")
 
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
@@ -187,6 +204,7 @@ class DQNAgent:
     # Update the target model with weights from the main model
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
+
 
 # Worker function to run the environment and collect experiences
 def worker(cfg, model_weights_queue, replay_queue, agent):
@@ -210,7 +228,7 @@ def worker(cfg, model_weights_queue, replay_queue, agent):
         gripper_offset=cfg.gripper_offset,
         fixed_z_height=cfg.fixed_z_height,
         absolut_movement=cfg.absolut_movement,
-        distance_reward_scale=cfg.distance_reward_scale,
+        distance_obj_area_reward_scale=cfg.distance_obj_area_reward_scale,
         iou_reward_scale=cfg.iou_reward_scale,  # Pass the parameter
         no_movement_threshold=cfg.no_movement_threshold,
     )
@@ -236,6 +254,7 @@ def worker(cfg, model_weights_queue, replay_queue, agent):
             logger.debug("#################################################################################################")
         else:
             state = next_state
+
 
 # Train the model using multiple environments
 def train_model(env_config, num_envs):
@@ -272,10 +291,12 @@ def train_model(env_config, num_envs):
         p.terminate()
         p.join()
 
+
 # Main function to start training
 @hydra.main(version_base=None, config_path="config", config_name="DQN")
 def main(cfg: DictConfig):
     train_model(cfg, num_envs=cfg.num_envs)
+
 
 if __name__ == "__main__":
     main()

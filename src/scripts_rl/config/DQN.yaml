@@ -31,17 +31,19 @@ movement_bounds:
   - [-0.4, 0.4]  # y bounds
   - [-0.5, 0.5]  # z bounds
 
-# Step size for the robot (in meters)
-step_size: 0.1
+
+# Step size somewhat relative to the workspace bounds, not more that 0.5 as that would overshoot the object
+step_size: 0.4
 
 # Movement condition
-absolut_movement: True
+absolut_movement: False
 
-# Threshold for no movement
+# Threshold for no movement punishment
 no_movement_threshold: 0.02
 
 # Reward
-distance_reward_scale: 1000
+distance_obj_area_reward_scale: 1000
+distance_TCP_obj_reward_scale: 50           # Faustregel: Faktor 10-20 kleiner als distance_obj_area_reward_scale
 iou_reward_scale: 2000
 max_moves_without_positive_reward: 3
 
@@ -74,6 +76,10 @@ camera:
   image_size: [84, 84]  # Standard size for DQN input
   orthographic: true
 
+# Supervisor settings
+supervisor:
+  sv_90deg_movement_threshold: 0.1      # 0.1 seems to be a good value, as most objects are smaller than 0.1m;   <0.1 is getting more aggressive with pushing and less "rotating" around the object 
+
 # Environment settings
 env:
   _target_: bullet_env.pushing_env.PushingEnv  # Make sure this points to PushingEnv
@@ -83,8 +89,7 @@ env:
   teletentric_camera: ${teletentric_camera}
   workspace_bounds: ${workspace_bounds}
   movement_bounds: ${movement_bounds}
-  step_size: 0.1
   success_threshold: 0.05
   max_steps: 200
   coordinate_axes_urdf_path: null
-
+#  step_size: 0.1

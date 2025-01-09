@@ -3,13 +3,19 @@
 --------------------------------------------------------------------------------------------------------
 ## Priority 1 (sehr hoch)
 
-- Reward: IOU nutzen anstelle von "Orientation-based term as a placeholder for IoU:"
+- Reward: testen ob "Reward: Distance-based reward of TCP to object" auch bei Multi-Obj gut
 
-- Reward: Wenn Distanz zwischen Obj & Area vor und nach der Action sich ändert, gibt es einen reward 
+- Reward: IOU von Christoph übernehmen/verbessern
 
+- Überlegen ob "Multi-Training" noch irgendeine Relvanz hat
+
+- logger.debug("Resampling due to zero rewards.") - Timeout nach 100 versuchten bufferlesen MUSS GETESTET WERDEN, funktioniert unter umständen nicht/vmtl nicht (zum Testen, zb Robot_mvt auf 0 setzten, dann ganz schnell machbar)
 
 
 ## Priority 2
+
+- bei "absolut_movement == True", eventuell X und Y richtung vertauscht?!? RoboterX = ObjY und umgekehrt!   action[0] = 2 * ((obj_pose.translation[0] - self.env.movement_bounds[0][0]) / x_range) - 1         action[1] = 2 * ((obj_pose.translation[1] - self.env.movement_bounds[1][0]) / y_range) - 1
+
 - Netz-Gewichte zwischenspeichern & vorbereiten, dass bei späteren trainings darauf basiert aufgebaut werden kann?
 
 - Beim Modelle zwischenspeichern aufpassen, dass man nichts gute alte Netze nicht überschrieben werden, vllt beim normalen Speichern jeweils mit Uhrzeit/Tag-Namen-Ordner arbeiten, und dann einen "Best"-Ordner pflegen
