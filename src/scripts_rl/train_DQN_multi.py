@@ -27,18 +27,29 @@ if gpus:
 class ConvDQN(tf.keras.Model):
     def __init__(self, action_dim=2):
         super().__init__()
-        self.conv1 = tf.keras.layers.Conv2D(16, 3, strides=2, activation="relu")
-        self.conv2 = tf.keras.layers.Conv2D(32, 3, strides=2, activation="relu")
+        initializer = tf.keras.initializers.HeNormal()  # Use He initialization
+        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=2, activation="relu", kernel_initializer=initializer)
+        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=2, activation="relu", kernel_initializer=initializer)
+        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=2, activation="relu", kernel_initializer=initializer)
+        self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=2, activation="relu", kernel_initializer=initializer)
         self.flatten = tf.keras.layers.Flatten()
-        self.fc1 = tf.keras.layers.Dense(128, activation="tanh")
-        self.fc2 = tf.keras.layers.Dense(action_dim)
+        self.fc1 = tf.keras.layers.Dense(512, activation="relu", kernel_initializer=initializer)
+        self.fc2 = tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer)
+        self.fc3 = tf.keras.layers.Dense(128, activation="relu", kernel_initializer=initializer)
+        self.fc4 = tf.keras.layers.Dense(action_dim, kernel_initializer=initializer)  # final layer with no activation
 
     def call(self, x):
+        # x: (batch_size, height, width, channels)
         x = self.conv1(x)
         x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
         x = self.flatten(x)
         x = self.fc1(x)
         x = self.fc2(x)
+        x = self.fc3(x)
+        x = self.fc4(x)
+        # Output in [-1,1]
         return tf.nn.tanh(x)
 
 
@@ -113,6 +124,8 @@ class DQNAgent:
         input_shape=(84, 84, 4),
         weights_path="",
         weights_dir="models/best",
+        learning_rate=0.00025,  # Add learning_rate parameter
+        use_pretrained_best_model=False,  # Add use_pretrained_best_model parameter
     ):
         self.action_dim = action_dim
         self.epsilon = epsilon
@@ -128,9 +141,9 @@ class DQNAgent:
         self.target_model = ConvDQN(action_dim)
         self.target_model(dummy_state)
 
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.00025)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)  # Use the learning_rate parameter
 
-        if weights_path:
+        if use_pretrained_best_model and weights_path:
             try:
                 weights_file_path = os.path.join(weights_dir, weights_path)
                 self.model.load_weights(weights_file_path)
@@ -262,7 +275,14 @@ def train_model(env_config, num_envs):
     replay_queue = mp.Queue(maxsize=10000)
     replay_buffer = PrioritizedReplayBuffer()
 
-    agent = DQNAgent(action_dim=2, input_shape=(84, 84, 4), weights_path=env_config.weights_path, weights_dir=env_config.weights_dir)
+    agent = DQNAgent(
+        action_dim=2,
+        input_shape=(84, 84, 4),
+        weights_path=env_config.weights_path,
+        weights_dir=env_config.weights_dir,
+        learning_rate=env_config.learning_rate,  # Pass the learning_rate from the config
+        use_pretrained_best_model=env_config.use_pretrained_best_model,  # Pass the use_pretrained_best_model from the config
+    )
     logger.debug(f"Agent loaded.")
 
     processes = []

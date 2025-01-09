@@ -253,6 +253,12 @@ class PushingEnv(BulletEnv):
                     else:
                         current_reward = 0.0
 
+                # Apply curve to make very high rewards gradually smaller. This is so that accidental high rewards do not dominate the training but even small movements are rewarded
+                if abs(current_reward) > 40:
+                    current_reward = 40 + (current_reward - 40) * 0.5 if current_reward > 0 else -40 + (current_reward + 40) * 0.5
+                elif abs(current_reward) > 15:
+                    current_reward = 15 + (current_reward - 15) * 0.75 if current_reward > 0 else -15 + (current_reward + 15) * 0.75
+
                 total_reward += round(current_reward, 2)
                 if current_reward != 0:
                     logger.info(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
@@ -330,11 +336,12 @@ class PushingEnv(BulletEnv):
         3. Not moving object or increasing IoU
         """
 
-        """
         # Punish for moving outside movement bounds
         if self.movement_punishment:
             total_reward -= 10.0
             logger.debug("Negative reward -10.0 given for moving outside movement bounds.")
+
+        """
 
         # Punishment for not moving
         eef_pos = self.robot.get_eef_pose().translation[:2]

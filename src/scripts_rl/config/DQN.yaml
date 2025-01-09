@@ -32,8 +32,8 @@ movement_bounds:
   - [-0.5, 0.5]  # z bounds
 
 
-# Step size somewhat relative to the workspace bounds, not more that 0.5 as that would overshoot the object
-step_size: 0.4
+# Step size relative to the workspace bounds, old value: 0.4, now it is 1 and i like better
+step_size: 1
 
 # Movement condition
 absolut_movement: False
@@ -43,7 +43,7 @@ no_movement_threshold: 0.02
 
 # Reward
 distance_obj_area_reward_scale: 1000
-distance_TCP_obj_reward_scale: 50           # Faustregel: Faktor 10-20 kleiner als distance_obj_area_reward_scale
+distance_TCP_obj_reward_scale: 25           # Faustregel: Faktor 20-50 kleiner als distance_obj_area_reward_scale
 iou_reward_scale: 2000
 max_moves_without_positive_reward: 3
 
@@ -54,6 +54,8 @@ max_steps_per_episode: 200 #200
 batch_size: 16
 target_update_freq: 100
 save_freq: 10
+learning_rate: 0.00005          # old value: 0.00025, trying a lower value now as the net seems to adpat too fast and be stuck at -1,-1
+use_pretrained_best_model: False
 
 # Load pretrained model
 weights_dir: "models/best"

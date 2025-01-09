@@ -11,6 +11,7 @@
 
 - logger.debug("Resampling due to zero rewards.") - Timeout nach 100 versuchten bufferlesen MUSS GETESTET WERDEN, funktioniert unter umständen nicht/vmtl nicht (zum Testen, zb Robot_mvt auf 0 setzten, dann ganz schnell machbar)
 
+- Größeres Netz?!?
 
 ## Priority 2
 
@@ -20,6 +21,7 @@
 
 - Beim Modelle zwischenspeichern aufpassen, dass man nichts gute alte Netze nicht überschrieben werden, vllt beim normalen Speichern jeweils mit Uhrzeit/Tag-Namen-Ordner arbeiten, und dann einen "Best"-Ordner pflegen
 
+- Entfernen der Dynamischen Zügezahl, ist unnötig unübersichtlich
 
 
 ## Priority 3

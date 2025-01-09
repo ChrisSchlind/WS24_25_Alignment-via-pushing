@@ -15,28 +15,38 @@ from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
 from bullet_env.ur10_cell import UR10Cell  # Import UR10Cell
 from bullet_env.pushing_env import PushingEnv  # Add this import
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 
 class ConvDQN(tf.keras.Model):
     def __init__(self, action_dim=2):
         super().__init__()
-        # Example CNN stack (adjust as needed):
-        self.conv1 = tf.keras.layers.Conv2D(16, 3, strides=2, activation="relu")
-        self.conv2 = tf.keras.layers.Conv2D(32, 3, strides=2, activation="relu")
+        initializer = tf.keras.initializers.GlorotUniform()  # 2 main options: .GlorotUniform() or .HeNormal()
+
+        # 4 Conv. + 4 FC layers
+        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=2, activation="relu", kernel_initializer=initializer)
+        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=2, activation="relu", kernel_initializer=initializer)
+        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=2, activation="relu", kernel_initializer=initializer)
+        self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=2, activation="relu", kernel_initializer=initializer)
         self.flatten = tf.keras.layers.Flatten()
-        self.fc1 = tf.keras.layers.Dense(128, activation="relu")
-        self.fc2 = tf.keras.layers.Dense(action_dim)  # final layer with no activation
-        # We'll apply tanh in call()
+        self.fc1 = tf.keras.layers.Dense(512, activation="relu", kernel_initializer=initializer)
+        self.fc2 = tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer)
+        self.fc3 = tf.keras.layers.Dense(128, activation="relu", kernel_initializer=initializer)
+        self.fc4 = tf.keras.layers.Dense(action_dim, kernel_initializer=initializer)  # Final layer without activation
 
     def call(self, x):
         # x: (batch_size, height, width, channels)
         x = self.conv1(x)
         x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
         x = self.flatten(x)
         x = self.fc1(x)
         x = self.fc2(x)
-        # Output in [-1,1]
-        return tf.nn.tanh(x)
+        x = self.fc3(x)
+        x = self.fc4(x)
+        return x  # Linear output, old was tf.nn.tanh(x)
 
 
 class PrioritizedReplayBuffer:
@@ -230,17 +240,17 @@ class DQNSupervisor:
             movement = obj_pos - tcp_pos
 
             # if movement is too small, take an action weighted to the side of the object
-            logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {self.sv_90deg_movement_threshold}")
-            if np.linalg.norm(movement) < (self.sv_90deg_movement_threshold * random.uniform(0.95, 1.25)):
-                logger.debug(f"Supervisor said: TCP close to object, making a mvt. 90° to the side * randomDistanceFactor")
-                movement = np.array([movement[1], -movement[0]]) * random.uniform(0.75, 1.25)
+            random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
+            logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
+            if np.linalg.norm(movement) < random_90degDistance_threshold:
+                logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
+                # movement = np.array([movement[1], -movement[0]]) * random.uniform(0.75, 1.25)
+                movement = np.array([movement[1], -movement[0]])
 
             # Normalize movement, normalize over workspace bounds
             # ATTENTION: X and Y are swapped because of the camera orientation
-            x_range = self.env.workspace_bounds[0][1] - self.env.workspace_bounds[0][0]
-            y_range = self.env.workspace_bounds[1][1] - self.env.workspace_bounds[1][0]
-            action[0] = 2 * (movement[1] / x_range) * random.uniform(0.8, 1.2)
-            action[1] = 2 * (movement[0] / y_range) * random.uniform(0.8, 1.2)
+            action[0] = movement[1] * random.uniform(1, 1.2)
+            action[1] = movement[0] * random.uniform(1, 1.2)
 
         # -----------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -263,6 +273,8 @@ class DQNAgent:
         input_shape=(84, 84, 4),
         weights_path="",
         weights_dir="models/best",
+        learning_rate=0.00025,  # Add learning_rate parameter
+        use_pretrained_best_model=False,  # Add use_pretrained_best_model parameter
     ):
         self.action_dim = action_dim
         self.epsilon = epsilon
@@ -270,6 +282,8 @@ class DQNAgent:
         self.epsilon_decay = epsilon_decay
         self.gamma = gamma
         self.input_shape = input_shape
+        self.agent_actions = []  # Store only agent actions for plotting
+        self.supervisor_actions = []  # Store only supervisor actions for plotting
 
         # Create main and target networks
         self.model = ConvDQN(action_dim)
@@ -282,7 +296,7 @@ class DQNAgent:
         self.target_model = ConvDQN(action_dim)
         self.target_model(dummy_state)  # Initialize with correct shape
 
-        if weights_path:
+        if use_pretrained_best_model and weights_path:
             try:
                 weights_file_path = os.path.join(weights_dir, weights_path)
                 self.model.load_weights(weights_file_path)
@@ -294,24 +308,33 @@ class DQNAgent:
         else:
             logger.debug("Starting model with random weights")
 
-        # Now we can safely set weights
+        # Copy the weights from the main model also to the target model
         self.target_model.set_weights(self.model.get_weights())
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.00025)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)  # Use the learning_rate parameter
 
     def get_action(self, state, supervisor, training=True):
         if training and np.random.random() < self.epsilon:
             # Ask supervisor for action
             logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
-            return supervisor.ask_supervisor()
+            action = supervisor.ask_supervisor()
+            self.supervisor_actions.append(action)  # Store supervisor actions for plotting
         else:
-            logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
-
-        state = np.expand_dims(state, axis=0)
-        # Direct continuous output from network
-        action = self.model(state)[0].numpy()
+            logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+            state = np.expand_dims(state, axis=0)
+            # Direct continuous output from network
+            action = self.model(state)[0].numpy()
+            self.agent_actions.append(action)  # Store agent actions for plotting
 
         # Ensure actions are in [-1,1] range
-        return np.clip(action, -1, 1)
+        action = np.clip(action, -1, 1)
+
+        # Purge oldest actions if the length exceeds 10500
+        if len(self.agent_actions) > 10500:
+            self.agent_actions = self.agent_actions[-10500:]
+        if len(self.supervisor_actions) > 10500:
+            self.supervisor_actions = self.supervisor_actions[-10500:]
+
+        return action
 
     def train(self, replay_buffer, batch_size=32, beta=0.4):
         # Check if the replay buffer is of the correct type
@@ -387,6 +410,67 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
 
 
+def plot_actionHistory(agent_actions, supervisor_actions, plot_dir, episode):
+    """Plot agent and supervisor actions with fading colors and save the plot."""
+    fig, ax = plt.subplots()
+    num_agent_actions = len(agent_actions)
+    num_supervisor_actions = len(supervisor_actions)
+    agent_colors = plt.cm.Blues(np.linspace(0.3, 1, num_agent_actions))
+    supervisor_colors = plt.cm.Greens(np.linspace(0.3, 1, num_supervisor_actions))
+
+    for i, action in enumerate(agent_actions):
+        ax.scatter(action[0], action[1], color=agent_colors[i], s=10, label="Agent Action" if i == 0 else "")
+
+    for i, action in enumerate(supervisor_actions):
+        ax.scatter(action[0], action[1], color=supervisor_colors[i], s=10, label="Supervisor Action" if i == 0 else "")
+
+    ax.set_xlabel("Action X")
+    ax.set_ylabel("Action Y")
+    ax.set_title("Agent (blue) and Supervisor (green) Actions Over Time")
+    ax.legend()
+
+    # Save the plot image
+    plt.tight_layout()
+    plt.savefig(f"{plot_dir}/agent_supervisor_actions_{episode}.png")
+    plt.close()
+
+
+def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
+    # Create the figure and the first y-axis
+    fig, ax1 = plt.subplots()
+
+    # Plot the rewards on the first y-axis
+    ax1.plot(rewards, label="Reward", color="tab:blue")
+    ax1.set_xlabel("Episode")
+    ax1.set_ylabel("Reward", color="tab:blue")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+
+    # Create the second y-axis that shares the same x-axis
+    ax2 = ax1.twinx()
+
+    # Plot the epsilons on the second y-axis
+    ax2.plot(epsilons, label="Epsilon", color="tab:orange")
+    ax2.set_ylabel("Epsilon", color="tab:orange")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+
+    # Add the legend
+    ax1.legend(loc="upper left")
+    ax2.legend(loc="upper right")
+
+    # test if plot_dir exists, if not create it
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+
+    # Save the plot image
+    plt.tight_layout()  # Avoid cutting off labels
+    plt.savefig(f"{plot_dir}/dqn_rewards_epsilons_{episode}.png")
+    plt.close()
+
+    # Save the rewards and epsilons to a CSV file
+    data = np.column_stack((rewards, epsilons))
+    np.savetxt(f"{plot_dir}/dqn_rewards_epsilons_{episode}.csv", data, delimiter=",", header="Reward,Epsilon", comments="")
+
+
 @hydra.main(version_base=None, config_path="config", config_name="DQN")
 def main(cfg: DictConfig) -> None:
     logger.remove()
@@ -431,7 +515,14 @@ def main(cfg: DictConfig) -> None:
     supervisor = DQNSupervisor(
         action_dim, env, workspace_bounds=cfg.workspace_bounds, sv_90deg_movement_threshold=cfg.supervisor.sv_90deg_movement_threshold
     )
-    agent = DQNAgent(action_dim, input_shape=input_shape, weights_path=cfg.weights_path, weights_dir=cfg.weights_dir)
+    agent = DQNAgent(
+        action_dim,
+        input_shape=input_shape,
+        weights_path=cfg.weights_path,
+        weights_dir=cfg.weights_dir,
+        learning_rate=cfg.learning_rate,  # Pass the learning_rate from the config
+        use_pretrained_best_model=cfg.use_pretrained_best_model,  # Pass the use_pretrained_best_model from the config
+    )
     logger.info("DQN supervisor and DQN agent initialized.")
     replay_buffer = PrioritizedReplayBuffer()
     logger.info("Replay buffer initialized.")
@@ -485,6 +576,7 @@ def main(cfg: DictConfig) -> None:
         # Plot rewards and epsilon in the same graph and save in to file periodically
         if episode % cfg.plot_freq == 0 and episode > 0:
             plot_rewards_epsilons(rewards, epsilons, episode, cfg.plot_dir)
+            plot_actionHistory(agent.agent_actions, agent.supervisor_actions, cfg.plot_dir, episode)  # Plot agent and supervisor actions
 
         # Save model periodically
         if episode % cfg.save_freq == 0 and episode > 0:
@@ -492,42 +584,6 @@ def main(cfg: DictConfig) -> None:
 
     env.close()
     logger.debug("Training completed.")
-
-
-def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
-    # Create the figure and the first y-axis
-    fig, ax1 = plt.subplots()
-
-    # Plot the rewards on the first y-axis
-    ax1.plot(rewards, label="Reward", color="tab:blue")
-    ax1.set_xlabel("Episode")
-    ax1.set_ylabel("Reward", color="tab:blue")
-    ax1.tick_params(axis="y", labelcolor="tab:blue")
-
-    # Create the second y-axis that shares the same x-axis
-    ax2 = ax1.twinx()
-
-    # Plot the epsilons on the second y-axis
-    ax2.plot(epsilons, label="Epsilon", color="tab:orange")
-    ax2.set_ylabel("Epsilon", color="tab:orange")
-    ax2.tick_params(axis="y", labelcolor="tab:orange")
-
-    # Add the legend
-    ax1.legend(loc="upper left")
-    ax2.legend(loc="upper right")
-
-    # test if plot_dir exists, if not create it
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
-
-    # Save the plot image
-    plt.tight_layout()  # Avoid cutting off labels
-    plt.savefig(f"{plot_dir}/dqn_rewards_epsilons_{episode}.png")
-    plt.close()
-
-    # Save the rewards and epsilons to a CSV file
-    data = np.column_stack((rewards, epsilons))
-    np.savetxt(f"{plot_dir}/dqn_rewards_epsilons_{episode}.csv", data, delimiter=",", header="Reward,Epsilon", comments="")
 
 
 if __name__ == "__main__":
