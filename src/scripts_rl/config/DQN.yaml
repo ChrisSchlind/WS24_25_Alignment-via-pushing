@@ -91,7 +91,8 @@ env:
   teletentric_camera: ${teletentric_camera}
   workspace_bounds: ${workspace_bounds}
   movement_bounds: ${movement_bounds}
-  success_threshold: 0.05
+  success_threshold_trans: 0.05
+  succes_threshold_rot: 20.0
   max_steps: 200
   coordinate_axes_urdf_path: null
 #  step_size: 0.1
