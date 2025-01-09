@@ -78,7 +78,7 @@ camera:
 
 # Supervisor settings
 supervisor:
-  sv_90deg_movement_threshold: 0.1      # 0.1 seems to be a good value, as most objects are smaller than 0.1m;   <0.1 is getting more aggressive with pushing and less "rotating" around the object 
+  sv_90deg_movement_threshold: 0.95      # 0.1 seems to be a good value, as most objects are smaller than 0.1m;   <0.1 is getting more aggressive with pushing and less "circling" around the object 
 
 # Environment settings
 env:

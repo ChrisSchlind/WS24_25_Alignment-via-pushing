@@ -142,7 +142,7 @@ class DQNSupervisor:
         self.min_obj_area_threshold = min_obj_area_threshold
         self.max_obj_area_threshold = max_obj_area_threshold
         self.extra_distance = extra_distance
-        self.sv_90deg_movement_threshold = sv_90deg_movement_threshold 
+        self.sv_90deg_movement_threshold = sv_90deg_movement_threshold
         self.last_id = 0
 
     def ask_supervisor(self):
@@ -228,25 +228,27 @@ class DQNSupervisor:
 
             # Movement/Distance&Direction between object and TCP
             movement = obj_pos - tcp_pos
+            random_distance_scaling_factor = random.uniform(0.75, 1.25)
 
             # if movement is too small, take an action weighted to the side of the object
             logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {self.sv_90deg_movement_threshold}")
             if np.linalg.norm(movement) < self.sv_90deg_movement_threshold:
-                logger.debug(f"Supervisor said: TCP close to object, making a mvt. 90° to the side * randomDistanceFactor.")
-                random_distance_scaling_factor = random.uniform(0.75, 1.25)
+                logger.debug(f"Supervisor said: TCP close to object, making a mvt. 90° to the side * randomDistanceFactor")
                 movement = np.array([movement[1], -movement[0]]) * random_distance_scaling_factor
 
             # Normalize movement, normalize over workspace bounds
             # ATTENTION: X and Y are swapped because of the camera orientation
             x_range = self.env.workspace_bounds[0][1] - self.env.workspace_bounds[0][0]
             y_range = self.env.workspace_bounds[1][1] - self.env.workspace_bounds[1][0]
-            action[1] = 2 * (movement[0] / x_range)
-            action[0] = 2 * (movement[1] / y_range)
+            action[0] = 2 * (movement[1] / x_range) * random_distance_scaling_factor
+            action[1] = 2 * (movement[0] / y_range) * random_distance_scaling_factor
+
+        # -----------------------------------------------------------------------------------------------------------------------------------------------
 
         # Clip action between [-1 1], needed for objects that are pushed off the table and now lie outside of workspace in the void
         action = np.clip(action, -1, 1)
 
-        logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pose}")
+        logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pos}")
 
         return action
 
@@ -300,8 +302,10 @@ class DQNAgent:
     def get_action(self, state, supervisor, training=True):
         if training and np.random.random() < self.epsilon:
             # Ask supervisor for action
-            logger.debug(f"Supervisor asked for action with epsilon {self.epsilon}")
+            logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
             return supervisor.ask_supervisor()
+        else:
+            logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
 
         state = np.expand_dims(state, axis=0)
         # Direct continuous output from network
@@ -521,6 +525,10 @@ def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
     plt.tight_layout()  # Avoid cutting off labels
     plt.savefig(f"{plot_dir}/dqn_rewards_epsilons_{episode}.png")
     plt.close()
+
+    # Save the rewards and epsilons to a CSV file
+    data = np.column_stack((rewards, epsilons))
+    np.savetxt(f"{plot_dir}/dqn_rewards_epsilons_{episode}.csv", data, delimiter=",", header="Reward,Epsilon", comments="")
 
 
 if __name__ == "__main__":
