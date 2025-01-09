@@ -226,31 +226,54 @@ class DQNSupervisor:
             for i in range(len(self.env.current_task.push_objects)):
                 obj, area = self.env.current_task.get_object_and_area_with_same_id(i)
                 obj_pose = self.env.get_pose(obj.unique_id)
+                area_pose = self.env.get_pose(area.unique_id)
                 obj_pos = obj_pose.translation[:2]
+                area_pos = area_pose.translation[:2]
+
+                # skip objects that are already in the area and aligned with the area, important if more than one object is in the task
+                if (
+                    np.linalg.norm(obj_pos - area_pos) > self.env.success_threshold_trans 
+                    and self.env._check_object_to_area_rotation(obj, area)
+                ):
+                    continue
+
                 dist = np.linalg.norm(obj_pos - tcp_pos)
                 if dist < min_distance:
                     min_distance = dist
                     id = i
 
-            obj, area = self.env.current_task.get_object_and_area_with_same_id(id)
+            obj, area = self.env.current_task.get_object_and_area_with_same_id(id)            
             obj_pose = self.env.get_pose(obj.unique_id)
+            area_pose = self.env.get_pose(area.unique_id)
             obj_pos = obj_pose.translation[:2]
+            area_pos = area_pose.translation[:2]
 
             # Movement/Distance&Direction between TCP and object
             movement = obj_pos - tcp_pos
 
-            # if movement is too small, take an action weighted to the side of the object
-            random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
-            logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
-            if np.linalg.norm(movement) < random_90degDistance_threshold:
-                logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
-                # movement = np.array([movement[1], -movement[0]]) * random.uniform(0.75, 1.25)
-                movement = np.array([movement[1], -movement[0]])
+            # Calculate orthogonal distance between the line (TCP, Area) and the object
+            orthogonal_distance = self.orthogonal_distance(obj_pos, area_pos, tcp_pos)
 
-            # Normalize movement, normalize over workspace bounds
-            # ATTENTION: X and Y are swapped because of the camera orientation
-            action[0] = movement[1] * random.uniform(1, 1.2)
-            action[1] = movement[0] * random.uniform(1, 1.2)
+            if orthogonal_distance < (obj.min_dist / 2):
+                logger.debug(f"Supervisor said: Object is in line between TCP and Area and therefore move to object.")
+
+                # ATTENTION: X and Y are swapped because of the camera orientation
+                action[0] = movement[1] * random.uniform(1, 2.0)
+                action[1] = movement[0] * random.uniform(1, 2.0)
+
+            else:
+                # If the object is not in line between TCP and Area, move to the side of the object
+                # If movement is too small, take an action weighted to the side of the object
+                random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
+                logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
+
+                if np.linalg.norm(movement) < random_90degDistance_threshold:
+                    logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
+                    movement = np.array([movement[1], -movement[0]])
+
+                # ATTENTION: X and Y are swapped because of the camera orientation
+                action[0] = movement[1] * random.uniform(1, 1.2)
+                action[1] = movement[0] * random.uniform(1, 1.2)
 
         # -----------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -260,6 +283,43 @@ class DQNSupervisor:
         logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pos}")
 
         return action
+    
+    def orthogonal_distance(self, obj_pos, area_pos, tcp_pos):
+        """
+        Calculates the orthogonal distance between a line and a point.
+
+        :param obj_pos: List [x, y] of the object's position
+        :param area_pos: List [x, y] of the area's position
+        :param tcp_pos: List [x, y] of the TCP's position
+        :return: Orthogonal distance
+        """
+        # Convert to numpy arrays for easier calculations
+        obj = np.array(obj_pos)
+        area = np.array(area_pos)
+        tcp = np.array(tcp_pos)
+
+        # Direction vector of the line
+        line_vec = area - tcp
+
+        # Vector from TCP to the object
+        point_vec = obj - tcp
+
+        # Calculate distance between the object and the area
+        obj_area_distance = np.linalg.norm(obj - area)
+
+        # Calculate distance between the TCP and the area
+        tcp_area_distance = np.linalg.norm(tcp - area)
+
+        # If the TCP is closer to the area than the object, return infinity
+        # Object is behind the TCP relative to the area
+        # Object is next to the TCP relative to the area
+        if tcp_area_distance < obj_area_distance or abs(obj_area_distance - tcp_area_distance) < 0.01:
+            return float("inf")
+
+        # Orthogonal distance (cross product of the direction vector with the point vector, normalized by the length of the direction vector)
+        distance = np.linalg.norm(np.cross(line_vec, point_vec)) / np.linalg.norm(line_vec)
+
+        return float(distance)
 
 
 class DQNAgent:
@@ -381,8 +441,8 @@ class DQNAgent:
         # Apply the Importance Sampling Weights
         weighted_loss = weights * loss  # TensorFlow computation, maintaining the gradient flow
 
-        # logger.debug(f"Weights: {weights}")
-        # logger.debug(f"Weighted Loss: {weighted_loss}")
+        logger.debug(f"Weights: {weights}")
+        logger.debug(f"Weighted Loss: {weighted_loss}")
 
         # Check if any gradients are None
         grads = tape.gradient(loss, self.model.trainable_variables)
@@ -513,7 +573,10 @@ def main(cfg: DictConfig) -> None:
     action_dim = 2  # (x,y) continuous actions
     input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
     supervisor = DQNSupervisor(
-        action_dim, env, workspace_bounds=cfg.workspace_bounds, sv_90deg_movement_threshold=cfg.supervisor.sv_90deg_movement_threshold
+        action_dim,
+        env,
+        workspace_bounds=cfg.workspace_bounds,
+        sv_90deg_movement_threshold=cfg.supervisor.sv_90deg_movement_threshold
     )
     agent = DQNAgent(
         action_dim,
