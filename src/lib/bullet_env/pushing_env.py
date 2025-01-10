@@ -366,7 +366,7 @@ class PushingEnv(BulletEnv):
             self.moves_without_positive_reward += 1        
         """
 
-        return -(total_reward)
+        return total_reward
 
     def _check_done(self):
         """Check if episode should end"""
