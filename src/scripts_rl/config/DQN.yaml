@@ -5,7 +5,7 @@ defaults:
   - teletentric_camera: ../teletentric_camera_config
   - _self_
 
-log_level: DEBUG # INFO, DEBUG, WARN, ERROR
+log_level: ERROR # DEBUG, INFO, WARNING, ERROR
 
 debug: true
 render: true
@@ -36,7 +36,7 @@ movement_bounds:
 step_size: 1
 
 # Movement condition
-absolut_movement: False
+absolut_movement: True
 
 # Threshold for no movement punishment
 no_movement_threshold: 0.02
