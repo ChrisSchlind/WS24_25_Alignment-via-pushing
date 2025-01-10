@@ -338,12 +338,12 @@ class PushingEnv(BulletEnv):
         3. Not moving object or increasing IoU
         """
 
+        """
+
         # Punish for moving outside movement bounds
         if self.movement_punishment:
             total_reward -= 10.0
-            logger.debug("Negative reward -10.0 given for moving outside movement bounds.")
-
-        """
+            logger.debug("Negative reward -10.0 given for moving outside movement bounds.")        
 
         # Punishment for not moving
         eef_pos = self.robot.get_eef_pose().translation[:2]
