@@ -79,6 +79,8 @@ class PushingEnv(BulletEnv):
         self.current_task = self.task_factory.create_task()
         self.current_task.setup(self)
 
+        self.robot.home()  # Move robot to home position
+
         # start pose = a random position in the workspace
         start_pose = Affine(
             translation=[
