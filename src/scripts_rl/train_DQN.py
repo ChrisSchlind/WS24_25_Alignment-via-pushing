@@ -20,33 +20,34 @@ import matplotlib.colors as mcolors
 
 
 class ConvDQN(tf.keras.Model):
-    def __init__(self, action_dim=2):
+    def __init__(self, initializer=tf.keras.initializers.GlorotUniform()):
         super().__init__()
-        initializer = tf.keras.initializers.GlorotUniform()  # 2 main options: .GlorotUniform() or .HeNormal()
+        # Initializer for the weights
+        self.initializer = initializer
 
-        # 4 Conv. + 4 FC layers
-        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=2, activation="relu", kernel_initializer=initializer)
-        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=2, activation="relu", kernel_initializer=initializer)
-        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=2, activation="relu", kernel_initializer=initializer)
-        self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=2, activation="relu", kernel_initializer=initializer)
-        self.flatten = tf.keras.layers.Flatten()
-        self.fc1 = tf.keras.layers.Dense(512, activation="relu", kernel_initializer=initializer)
-        self.fc2 = tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer)
-        self.fc3 = tf.keras.layers.Dense(128, activation="relu", kernel_initializer=initializer)
-        self.fc4 = tf.keras.layers.Dense(action_dim, kernel_initializer=initializer)  # Final layer without activation
+        # 4 Conv-Layers, each with 'same' padding to keep the output size the same as the input size
+        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+
+        # Final Conv2D layer for the heatmap output (H, W, 1)
+        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', kernel_initializer=self.initializer)
 
     def call(self, x):
         # x: (batch_size, height, width, channels)
+
+        # Convolutional Layers
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
-        x = self.flatten(x)
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        x = self.fc4(x)
-        return x  # Linear output, old was tf.nn.tanh(x)
+
+        # Final heatmap (H, W, 1)
+        x = self.heatmap(x)
+
+        # Return the heatmap (no activation because this is a continuous value map)
+        return x  # Heatmap of dimension (batch_size, H, W, 1)
 
 
 class PrioritizedReplayBuffer:
@@ -99,8 +100,6 @@ class PrioritizedReplayBuffer:
             reward_max = np.max(rewards)
 
             if (reward_min == 0 and reward_max == 0) or reward_min == reward_max:
-                logger.debug("Resampling due to zero rewards.")
-                logger.debug(f"i={i}")
                 if i > 100:  ## Testing by Luis, if too many resampling attempts, return -1 norm. rewards
                     logger.info("Resampling failed after 100 attempts, returning neutral values.")
                     # set rewards to small random values
@@ -128,7 +127,7 @@ class PrioritizedReplayBuffer:
     def update_priorities(self, indices, errors):
         # Update the priorities for the given indices based on the errors
         for idx, error in zip(indices, errors):
-            priority = self._get_priority(error[1] / (1 + np.abs(error[1])))
+            priority = self._get_priority(error / (1 + np.abs(error)))
             self.priorities[idx] = priority
 
     def size(self):
@@ -157,125 +156,89 @@ class DQNSupervisor:
 
     def ask_supervisor(self):
         # Initialize action
+        rel_action = np.zeros(self.action_dim)
         action = np.zeros(self.action_dim)
 
         # Initialize id
         id = 0
-        while_loop = True
 
-        # -------------------------------------------------------------------------------------------------------------------------------------------------
-        # ABSOLUT MOVEMENTS     ---------------------------------------------------------------------------------------------------------------------------
-        if self.env.absolut_movement == True:
+        # Determine supervisor action as relative movement towards the object
+        # After that convert relative movement to absolute movement
 
-            # Check if one object got positive reward last step otherwise take a random object under the condition that it is not the same object as last step
-            for i in range(len(self.env.current_task.push_objects)):
-                if self.env.absolute_obj_area_distances[i] > 0 and self.env.distance_obj_area_rewards[i] > 0:
-                    id = i
-                    while_loop = False
-                if self.env.absolute_TCP_obj_distances[i] > 0 and self.env.distance_TCP_obj_rewards[i] > 0:
-                    id = i
-                    while_loop = False
+        # ----------------- Relative Movement -----------------
 
-            # Randomly select an object
-            while id == self.last_id and while_loop == True:  # Ensure that the same object is not selected twice
-                id = random.randint(0, len(self.env.current_task.push_objects) - 1)
+        # Calculate movement towards the object
+        tcp_pose = self.env.get_tcp_pose()
+        tcp_pos = tcp_pose.translation[:2]
 
-                if len(self.env.current_task.push_objects) == 1:  # If only one object, than that's the only option
-                    break
-
-            self.last_id = id
-            obj, area = self.env.current_task.get_object_and_area_with_same_id(id)
-
-            # Get the object and area pose
+        # Check for the nearest object to the TCP
+        min_distance = float("inf")
+        for i in range(len(self.env.current_task.push_objects)):
+            obj, area = self.env.current_task.get_object_and_area_with_same_id(i)
             obj_pose = self.env.get_pose(obj.unique_id)
             area_pose = self.env.get_pose(area.unique_id)
             obj_pos = obj_pose.translation[:2]
             area_pos = area_pose.translation[:2]
 
-            # Check if object is outside of workspace, than it is not good to push it because we will only risk to push it off the table
-            if not (
-                (self.workspace_bounds[0][0] - self.extra_distance) <= obj_pose.translation[0] <= (self.workspace_bounds[0][1] + self.extra_distance)
-                and (self.workspace_bounds[1][0] - self.extra_distance)
-                <= obj_pose.translation[1]
-                <= (self.workspace_bounds[1][1] + self.extra_distance)
+            # skip objects that are already in the area and aligned with the area, important if more than one object is in the task
+            if (
+                np.linalg.norm(obj_pos - area_pos) > self.env.success_threshold_trans 
+                and self.env._check_object_to_area_rotation(obj, area)
             ):
-                logger.debug(f"Supervisor said: Random action because object is outside of workspace.")
-                return np.random.uniform(-1, 1, self.action_dim)
+                continue
 
-            # Check if object is already in area or too far away
-            dist = np.linalg.norm(obj_pos - area_pos)
-            if dist <= self.min_obj_area_threshold or dist >= self.max_obj_area_threshold:
-                logger.debug(f"Supervisor said: Random action because object with distance {dist} is already in area or too far away.")
-                return np.random.uniform(-1, 1, self.action_dim)
+            dist = np.linalg.norm(obj_pos - tcp_pos)
+            if dist < min_distance:
+                min_distance = dist
+                id = i
 
-            # Convert object pose to normalized action between [-1 1]
-            x_range = self.env.movement_bounds[0][1] - self.env.movement_bounds[0][0]
-            y_range = self.env.movement_bounds[1][1] - self.env.movement_bounds[1][0]
-            action[0] = 2 * ((obj_pose.translation[0] - self.env.movement_bounds[0][0]) / x_range) - 1
-            action[1] = 2 * ((obj_pose.translation[1] - self.env.movement_bounds[1][0]) / y_range) - 1
+        obj, area = self.env.current_task.get_object_and_area_with_same_id(id)            
+        obj_pose = self.env.get_pose(obj.unique_id)
+        area_pose = self.env.get_pose(area.unique_id)
+        obj_pos = obj_pose.translation[:2]
+        area_pos = area_pose.translation[:2]
 
-        # -----------------------------------------------------------------------------------------------------------------------------------------------
-        # RELATIVE MOVEMENTS  ---------------------------------------------------------------------------------------------------------------------------
+        # Movement/Distance&Direction between TCP and object
+        movement = obj_pos - tcp_pos
+
+        # Calculate orthogonal distance between the line (TCP, Area) and the object
+        orthogonal_distance = self.orthogonal_distance(obj_pos, area_pos, tcp_pos)
+
+        if orthogonal_distance < (obj.min_dist / 2):
+            logger.debug(f"Supervisor said: Object is in line between TCP and Area and therefore move to object.")
+
+            # Randomize the movement to the object
+            rel_action[1] = movement[1] * random.uniform(1, 2.0)
+            rel_action[0] = movement[0] * random.uniform(1, 2.0)
+
         else:
-            # Calculate movement towards the object
-            tcp_pose = self.env.get_tcp_pose()
-            tcp_pos = tcp_pose.translation[:2]
+            # If the object is not in line between TCP and Area, move to the side of the object
+            # If movement is too small, take an action weighted to the side of the object
+            random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
+            logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
 
-            # Check for the nearest object to the TCP
-            min_distance = float("inf")
-            for i in range(len(self.env.current_task.push_objects)):
-                obj, area = self.env.current_task.get_object_and_area_with_same_id(i)
-                obj_pose = self.env.get_pose(obj.unique_id)
-                area_pose = self.env.get_pose(area.unique_id)
-                obj_pos = obj_pose.translation[:2]
-                area_pos = area_pose.translation[:2]
+            if np.linalg.norm(movement) < random_90degDistance_threshold:
+                logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
+                movement = np.array([movement[1], -movement[0]])
 
-                # skip objects that are already in the area and aligned with the area, important if more than one object is in the task
-                if (
-                    np.linalg.norm(obj_pos - area_pos) > self.env.success_threshold_trans 
-                    and self.env._check_object_to_area_rotation(obj, area)
-                ):
-                    continue
+            # Randomize the movement to the side of the object
+            rel_action[1] = movement[1] * random.uniform(1, 1.2)
+            rel_action[0] = movement[0] * random.uniform(1, 1.2)   
 
-                dist = np.linalg.norm(obj_pos - tcp_pos)
-                if dist < min_distance:
-                    min_distance = dist
-                    id = i
+        # ----------------- Absolute Movement -----------------
 
-            obj, area = self.env.current_task.get_object_and_area_with_same_id(id)            
-            obj_pose = self.env.get_pose(obj.unique_id)
-            area_pose = self.env.get_pose(area.unique_id)
-            obj_pos = obj_pose.translation[:2]
-            area_pos = area_pose.translation[:2]
+        # Convert relative movement to absolute movement
+        abs_action = tcp_pos + rel_action
 
-            # Movement/Distance&Direction between TCP and object
-            movement = obj_pos - tcp_pos
+        # Define the range of the movement space
+        x_range = self.env.movement_bounds[0][1] - self.env.movement_bounds[0][0]
+        y_range = self.env.movement_bounds[1][1] - self.env.movement_bounds[1][0]
 
-            # Calculate orthogonal distance between the line (TCP, Area) and the object
-            orthogonal_distance = self.orthogonal_distance(obj_pos, area_pos, tcp_pos)
+        # Normalize action in movement boundaries
+        action[0] = (abs_action[0] - self.env.movement_bounds[0][0]) / x_range
+        action[1] = (abs_action[1] - self.env.movement_bounds[1][0]) / y_range
 
-            if orthogonal_distance < (obj.min_dist / 2):
-                logger.debug(f"Supervisor said: Object is in line between TCP and Area and therefore move to object.")
-
-                # ATTENTION: X and Y are swapped because of the camera orientation
-                action[0] = movement[1] * random.uniform(1, 2.0)
-                action[1] = movement[0] * random.uniform(1, 2.0)
-
-            else:
-                # If the object is not in line between TCP and Area, move to the side of the object
-                # If movement is too small, take an action weighted to the side of the object
-                random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
-                logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
-
-                if np.linalg.norm(movement) < random_90degDistance_threshold:
-                    logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
-                    movement = np.array([movement[1], -movement[0]])
-
-                # ATTENTION: X and Y are swapped because of the camera orientation
-                action[0] = movement[1] * random.uniform(1, 1.2)
-                action[1] = movement[0] * random.uniform(1, 1.2)
-
-        # -----------------------------------------------------------------------------------------------------------------------------------------------
+        action = 2 * action - 1 # to convert from [0,1] to [-1,1]
 
         # Clip action between [-1 1], needed for objects that are pushed off the table and now lie outside of workspace in the void
         action = np.clip(action, -1, 1)
@@ -346,14 +309,14 @@ class DQNAgent:
         self.supervisor_actions = []  # Store only supervisor actions for plotting
 
         # Create main and target networks
-        self.model = ConvDQN(action_dim)
+        self.model = ConvDQN()
 
         # Build models with dummy input
-        dummy_state = np.zeros((1,) + input_shape)
+        dummy_state = np.zeros((1,) + self.input_shape)
         self.model(dummy_state)  # Initialize with correct shape
 
         # Create and initialize target model
-        self.target_model = ConvDQN(action_dim)
+        self.target_model = ConvDQN()
         self.target_model(dummy_state)  # Initialize with correct shape
 
         if use_pretrained_best_model and weights_path:
@@ -378,15 +341,18 @@ class DQNAgent:
             logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
             action = supervisor.ask_supervisor()
             self.supervisor_actions.append(action)  # Store supervisor actions for plotting
+
+            '''logger.debug(f"Random action taken with {self.epsilon}")
+            action = np.random.uniform(-1, 1, self.action_dim)
+            self.supervisor_actions.append(action)'''
+            return action
         else:
             logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
             state = np.expand_dims(state, axis=0)
             # Direct continuous output from network
-            action = self.model(state)[0].numpy()
+            heatmap = self.model(state)[0].numpy()
+            action = self.choose_action_from_softmax(heatmap, temperature=1.0) # output is vector [x, y] with values between -1 and 1
             self.agent_actions.append(action)  # Store agent actions for plotting
-
-        # Ensure actions are in [-1,1] range
-        action = np.clip(action, -1, 1)
 
         # Purge oldest actions if the length exceeds 10500
         if len(self.agent_actions) > 10500:
@@ -409,14 +375,25 @@ class DQNAgent:
         # Sample a batch from the prioritized replay buffer
         states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-1.0, 1.0))
 
-        # logger.debug(f"Actions: {actions}")
-        # logger.debug(f"Rewards: {rewards}")
-
         # Calculate target values for Q-learning
-        targets = self.target_model(states).numpy()
-        next_value = np.max(self.target_model(next_states).numpy(), axis=1)
-        action_indices = np.argmax(actions, axis=1)
-        targets[range(actions.shape[0]), action_indices] = rewards + (1 - dones) * next_value * self.gamma
+        targets = self.target_model(states).numpy()  # This is a heatmap
+        next_value = np.max(self.target_model(next_states).numpy(), axis=(1, 2))  # Take max over height and width
+
+        # Update targets with actions from the replay buffer
+        for i in range(states.shape[0]):
+            # Retrieve action from replay buffer (values between -1 and 1)
+            action_x, action_y = actions[i]
+
+            # Convert the action from [-1, 1] to heatmap coordinates
+            height, width = targets.shape[1], targets.shape[2]  # Assuming heatmap size (batch_size, H, W, 1)
+            action_x = int((action_x + 1) * (width - 1) / 2)  # Map action_x to heatmap width
+            action_y = int((action_y + 1) * (height - 1) / 2)  # Map action_y to heatmap height
+
+            # Calculate the target value
+            target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
+
+            # Update target heatmap at the action location (action_x, action_y)
+            targets[i, action_y, action_x] = target_value
 
         # Ensure no NaN values in targets or values
         targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")
@@ -435,17 +412,23 @@ class DQNAgent:
             # Debugging the loss computation
             loss = tf.keras.losses.MSE(targets, values)  # Use manual MSE computation
 
-        # Calculate the error (difference between predicted value and target value)
-        errors = np.abs(targets - values.numpy())
+            # Ensure no NaN values in the loss
+            loss = tf.debugging.check_numerics(loss, message="Loss contains NaN or Inf")       
 
-        # Apply the Importance Sampling Weights
-        weighted_loss = weights * loss  # TensorFlow computation, maintaining the gradient flow
+            # Expand the weights to match the loss shape
+            weights_expanded = tf.reshape(weights, [-1, 1, 1])  # Change the shape to (batch_size, 1, 1)
+            weights_expanded = tf.broadcast_to(weights_expanded, loss.shape)  # Broadcast to the shape of loss (batch_size, H, W)
 
-        logger.debug(f"Weights: {weights}")
-        logger.debug(f"Weighted Loss: {weighted_loss}")
+            # Cast the weights and loss to float32
+            weights_expanded = tf.cast(weights_expanded, tf.float32)
+            loss = tf.cast(loss, tf.float32)
+
+            # Apply the Importance Sampling Weights
+            weighted_loss = weights_expanded * loss  # TensorFlow computation, maintaining the gradient flow
+            weighted_loss = tf.reduce_mean(weighted_loss)  # Average the loss over the batch
 
         # Check if any gradients are None
-        grads = tape.gradient(loss, self.model.trainable_variables)
+        grads = tape.gradient(weighted_loss, self.model.trainable_variables)
 
         # Debugging the gradients
         if any(grad is None for grad in grads):
@@ -456,6 +439,9 @@ class DQNAgent:
 
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+
+        # Calculate the error (difference between predicted value and target value)
+        errors = np.mean(np.abs(targets.numpy() - values.numpy()), axis=(1, 2, 3))
 
         # Update priorities in the replay buffer
         replay_buffer.update_priorities(indices, errors)
@@ -468,6 +454,35 @@ class DQNAgent:
 
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
+
+    def choose_action_from_softmax(self, heatmap, temperature=1.0):
+        # Squeeze the batch and channel dimensions
+        heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
+
+        # Apply softmax to the heatmap to get probabilities
+        softmax = tf.nn.softmax(heatmap / temperature)  # Temperature is used to control the "sharpness"
+
+        # Convert the tensor to a numpy array before flattening
+        softmax_numpy = softmax.numpy()  # Convert TensorFlow tensor to numpy array
+
+        # Normalize probabilities to ensure they sum to 1
+        softmax_numpy /= np.sum(softmax_numpy)  # This ensures that the sum is exactly 1
+
+        # Flatten the softmax output
+        flattened = softmax_numpy.flatten()  # Now you can flatten it
+
+        # Draw a random action based on the softmax probability
+        action_index = np.random.choice(len(flattened), p=flattened)
+
+        # Calculate the (i, j) position based on the flat index
+        i, j = np.unravel_index(action_index, softmax_numpy.shape)
+
+        # Normalize the (i, j) position to the range [-1, 1]
+        height, width = softmax_numpy.shape
+        normalized_y = 2 * i / (height - 1) - 1
+        normalized_x = 2 * j / (width - 1) - 1
+
+        return np.array([normalized_x, normalized_y])
 
 
 def plot_actionHistory(agent_actions, supervisor_actions, plot_dir, episode):
@@ -624,13 +639,17 @@ def main(cfg: DictConfig) -> None:
             episode_reward += reward
 
             if done:
+                logger.debug(f"Episode {episode} completed at step {step}. Reward = {episode_reward}")
+                logger.error(f"Episode {episode} completed at step {step}. Reward = {episode_reward}")
                 break
 
             if failed:
                 logger.debug(f"Episode {episode} failed at step {step} because all objects are outside of workspace.")
+                logger.error(f"Episode {episode} failed at step {step} because all objects are outside of workspace.")
                 break
 
         logger.debug(f"Episode {episode}: Reward = {episode_reward}")
+        logger.error(f"Episode {episode}: Reward = {episode_reward}")
 
         # Save rewards and epsilon for plotting
         rewards.append(episode_reward)
@@ -647,6 +666,7 @@ def main(cfg: DictConfig) -> None:
 
     env.close()
     logger.debug("Training completed.")
+    logger.error("Training completed.")
 
 
 if __name__ == "__main__":
