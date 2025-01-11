@@ -5,7 +5,7 @@ defaults:
   - teletentric_camera: ../teletentric_camera_config
   - _self_
 
-log_level: ERROR # DEBUG, INFO, WARNING, ERROR
+log_level: DEBUG # DEBUG, INFO, WARNING, ERROR
 
 debug: true
 render: true
@@ -26,9 +26,12 @@ workspace_bounds:
   - [-0.0125, 0.35] # z bounds
 
 # Movement bounds (in meters)
+# Movement bounds need to match the orthographic bounds of the camera
+# find in teletentric_camera_config.yaml
+# Center of the Camera is at x=0.6, y=0.0, z=0.1
 movement_bounds:
-  - [0.2, 1.0]  # x bounds
-  - [-0.4, 0.4]  # y bounds
+  - [0.15, 1.05]  # x bounds
+  - [-0.45, 0.45]  # y bounds
   - [-0.5, 0.5]  # z bounds
 
 
