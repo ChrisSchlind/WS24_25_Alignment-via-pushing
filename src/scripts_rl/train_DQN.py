@@ -72,7 +72,7 @@ class PrioritizedReplayBuffer:
         self.buffer.append([state, action, reward, next_state, done])
         self.priorities.append(priority)
 
-    def sample(self, batch_size, beta=0.4, reward_range=(-1.0, 1.0)):
+    def sample(self, batch_size, beta=0.4, reward_range=(-10.0, 10.0)):
         # Calculate the total priority of all experiences
         priorities = np.array(self.priorities)
         prob_dist = priorities / np.sum(priorities)
@@ -103,7 +103,7 @@ class PrioritizedReplayBuffer:
                 if i > 100:  ## Testing by Luis, if too many resampling attempts, return -1 norm. rewards
                     logger.info("Resampling failed after 100 attempts, returning neutral values.")
                     # set rewards to small random values
-                    rewards_normalized = np.ones(batch_size) * 0
+                    rewards_normalized = np.random.uniform(-1.0, 1.0, batch_size)
 
                     logger.debug(f"Normalized Rewards: {rewards_normalized}")
                     logger.info(f"norm. rewardSum: {np.sum(rewards_normalized)}")
@@ -112,11 +112,26 @@ class PrioritizedReplayBuffer:
 
             i += 1
 
-        # Normalize the rewards to the desired range
-        # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
+        # Initialize the normalized rewards
+        rewards_normalized = copy.deepcopy(rewards)
+
+        # Extract the min and max range from the reward_range
         reward_min_new, reward_max_new = reward_range
 
-        rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
+        # Seperate normalization between positive and negative rewards
+        # Otherwise really big positive rewards would cause that smaller positive rewards become negative normalized rewards
+
+        # Normalize positive rewards from 0 to reward_max_new
+        positive_rewards = rewards[rewards > 0]
+        if len(positive_rewards) > 0:
+            positive_rewards_normalized = positive_rewards / reward_max * reward_max_new
+            rewards_normalized[rewards > 0] = positive_rewards_normalized
+
+        # Normalize negative rewards from 0 to reward_min_new
+        negative_rewards = rewards[rewards < 0]
+        if len(negative_rewards) > 0:
+            negative_rewards_normalized = negative_rewards / reward_min * reward_min_new
+            rewards_normalized[rewards < 0] = negative_rewards_normalized
 
         logger.debug(f"Rewards: {rewards}")
         logger.debug(f"Normalized Rewards: {rewards_normalized}")
@@ -204,26 +219,35 @@ class DQNSupervisor:
         # Calculate orthogonal distance between the line (TCP, Area) and the object
         orthogonal_distance = self.orthogonal_distance(obj_pos, area_pos, tcp_pos)
 
+        # Calculate the random threshold for 90 degree movement
+        random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
+        logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
+
         if orthogonal_distance < (obj.min_dist / 2):
             logger.debug(f"Supervisor said: Object is in line between TCP and Area and therefore move to object.")
 
             # Randomize the movement to the object
-            rel_action[1] = movement[1] * random.uniform(1, 2.0)
-            rel_action[0] = movement[0] * random.uniform(1, 2.0)
+            rel_action[1] = movement[1] * random.uniform(0.8, 2.0)
+            rel_action[0] = movement[0] * random.uniform(0.8, 2.0)
 
-        else:
+        elif np.linalg.norm(movement) < random_90degDistance_threshold:
             # If the object is not in line between TCP and Area, move to the side of the object
-            # If movement is too small, take an action weighted to the side of the object
-            random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
-            logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
+            # If movement is too small, take an action weighted to the side of the object  
 
-            if np.linalg.norm(movement) < random_90degDistance_threshold:
-                logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
-                movement = np.array([movement[1], -movement[0]])
+            logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
+            movement = np.array([movement[1], -movement[0]])
 
             # Randomize the movement to the side of the object
-            rel_action[1] = movement[1] * random.uniform(1, 1.2)
-            rel_action[0] = movement[0] * random.uniform(1, 1.2)   
+            rel_action[1] = movement[1] * random.uniform(1, 1.3)
+            rel_action[0] = movement[0] * random.uniform(1, 1.3)
+        
+        else:
+            # Randomize the movement to the object and make it smaller so the supervisor does not push the object of the table
+            logger.debug(f"Supervisor said: Move a small distance to the object.")
+
+            # Randomize the movement to the object
+            rel_action[1] = movement[1] * random.uniform(0.7, 0.9)
+            rel_action[0] = movement[0] * random.uniform(0.7, 0.9)
 
         # ----------------- Absolute Movement -----------------
 
@@ -351,7 +375,14 @@ class DQNAgent:
             state = np.expand_dims(state, axis=0)
             # Direct continuous output from network
             heatmap = self.model(state)[0].numpy()
-            action = self.choose_action_from_softmax(heatmap, temperature=1.0) # output is vector [x, y] with values between -1 and 1
+            
+            action, pixels = self.choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
+
+            tmp_heatmap = copy.deepcopy(heatmap)
+            tmp_heatmap[pixels[0],pixels[1]] = 1
+            cv2.imshow("heatmap", cv2.resize(tmp_heatmap, (1000, 1000), interpolation=cv2.INTER_NEAREST))
+            cv2.waitKey(1)
+
             self.agent_actions.append(action)  # Store agent actions for plotting
 
         # Purge oldest actions if the length exceeds 10500
@@ -362,18 +393,13 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, beta=0.4):
-        # Check if the replay buffer is of the correct type
-        if not isinstance(replay_buffer, PrioritizedReplayBuffer):
-            raise TypeError(
-                "The replay buffer used must be an instance of PrioritizedReplayBuffer. Change replay_buffer in main from ReplayBuffer to PrioritizedReplayBuffer or use train method."
-            )
-
+    def train(self, replay_buffer, batch_size=32, beta=0.4, window_size=3):
+        
         if replay_buffer.size() < batch_size:
             return
 
         # Sample a batch from the prioritized replay buffer
-        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-1.0, 1.0))
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-10.0, 10.0))
 
         # Calculate target values for Q-learning
         targets = self.target_model(states).numpy()  # This is a heatmap
@@ -386,14 +412,27 @@ class DQNAgent:
 
             # Convert the action from [-1, 1] to heatmap coordinates
             height, width = targets.shape[1], targets.shape[2]  # Assuming heatmap size (batch_size, H, W, 1)
-            action_x = int((action_x + 1) * (width - 1) / 2)  # Map action_x to heatmap width
-            action_y = int((action_y + 1) * (height - 1) / 2)  # Map action_y to heatmap height
+            pixel_x = int((action_x + 1) * (width - 1) / 2)  # Map action_x to heatmap width
+            pixel_y = int((action_y + 1) * (height - 1) / 2)  # Map action_y to heatmap height
 
             # Calculate the target value
             target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
+            logger.debug(f"Target value: {target_value} with min of target: {np.min(targets[i])} and max of target: {np.max(targets[i])}")
 
-            # Update target heatmap at the action location (action_x, action_y)
-            targets[i, action_y, action_x] = target_value
+            # Create a temporary copy of the target heatmap for visualization
+            #tmp_targets = copy.deepcopy(targets[i].squeeze())
+
+            # Update target heatmap with a window_size around calculated pixel_x and pixel_y
+            half_window = window_size // 2
+            for dx in range(-half_window, half_window + 1):
+                for dy in range(-half_window, half_window + 1):
+                    nx, ny = pixel_x + dx, pixel_y + dy
+                    if 0 <= nx < height and 0 <= ny < width:
+                        targets[i, nx, ny] = target_value
+
+            # Display the target heatmap with the action location
+            #cv2.imshow("target", cv2.resize(tmp_targets, (1000, 1000), interpolation=cv2.INTER_NEAREST))
+            #cv2.waitKey(1)
 
         # Ensure no NaN values in targets or values
         targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")
@@ -455,34 +494,55 @@ class DQNAgent:
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
 
-    def choose_action_from_softmax(self, heatmap, temperature=1.0):
+    def choose_action_from_max_area(self, heatmap, window_size=3):
         # Squeeze the batch and channel dimensions
         heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
 
-        # Apply softmax to the heatmap to get probabilities
-        softmax = tf.nn.softmax(heatmap / temperature)  # Temperature is used to control the "sharpness"
+        # Find the position with the maximum value in the heatmap
+        max_index = np.unravel_index(np.argmax(heatmap), heatmap.shape)
 
-        # Convert the tensor to a numpy array before flattening
-        softmax_numpy = softmax.numpy()  # Convert TensorFlow tensor to numpy array
+        # Extract the window around the maximum value
+        i_min = max(max_index[0] - window_size // 2, 0)
+        i_max = min(max_index[0] + window_size // 2 + 1, heatmap.shape[0])
+        j_min = max(max_index[1] - window_size // 2, 0)
+        j_max = min(max_index[1] + window_size // 2 + 1, heatmap.shape[1])
 
-        # Normalize probabilities to ensure they sum to 1
-        softmax_numpy /= np.sum(softmax_numpy)  # This ensures that the sum is exactly 1
+        # Extract the local area around the maximum value
+        local_area = heatmap[i_min:i_max, j_min:j_max]
 
-        # Flatten the softmax output
-        flattened = softmax_numpy.flatten()  # Now you can flatten it
+        # Find the maximum value in the local area
+        local_max_index = np.unravel_index(np.argmax(local_area), local_area.shape)
 
-        # Draw a random action based on the softmax probability
-        action_index = np.random.choice(len(flattened), p=flattened)
-
-        # Calculate the (i, j) position based on the flat index
-        i, j = np.unravel_index(action_index, softmax_numpy.shape)
+        # Calculate the global index of the maximum value
+        global_index = (local_max_index[0] + i_min, local_max_index[1] + j_min)        
 
         # Normalize the (i, j) position to the range [-1, 1]
-        height, width = softmax_numpy.shape
-        normalized_y = 2 * i / (height - 1) - 1
-        normalized_x = 2 * j / (width - 1) - 1
+        height, width = heatmap.shape
+        normalized_x = 2 * global_index[0] / (height - 1) - 1
+        normalized_y = 2 * global_index[1] / (width - 1) - 1
 
-        return np.array([normalized_x, normalized_y])
+        # DEBUG: Convert heatmap to rgb, resize it to 1000x1000, make max value 255 and min value 0 and display it with opencv
+        # Convert heatmap to RGB
+        heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+        # Get max value of heatmap and min value of heatmap
+        max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+        min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
+
+        logger.debug(f"Max value: {max_pos}, Min value: {min_pos}")
+
+        # Make pixel at max_value red and pixel at min_value blue
+        heatmap_rgb[max_pos[0], max_pos[1], :] = [255, 255, 255]  # White
+        heatmap_rgb[min_pos[0], min_pos[1], :] = [0, 0, 0]  # Black
+
+        # Resize heatmap to 1000x1000
+        heatmap_resized = cv2.resize(heatmap_rgb, (1000, 1000), interpolation=cv2.INTER_NEAREST)
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Heatmap", heatmap_resized)
+        cv2.waitKey(1)
+
+        return np.array([normalized_x, normalized_y]), global_index
 
 
 def plot_actionHistory(agent_actions, supervisor_actions, plot_dir, episode):
