@@ -264,6 +264,7 @@ class PushingEnv(BulletEnv):
                     current_reward = 15 + (current_reward - 15) * 0.75 if current_reward > 0 else -15 + (current_reward + 15) * 0.75
 
                 total_reward += round(current_reward, 2)
+                
                 if current_reward != 0:
                     logger.info(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
                 else:
@@ -287,42 +288,44 @@ class PushingEnv(BulletEnv):
 
             # ******************************************************************
             # Distance-based reward of TCP to object, only when relative movements are set up
-            if self.absolut_movement == False:
-                tcp_pos = self.robot.get_eef_pose().translation[:2]
-                obj_pos = obj_pose.translation[:2]
+            # --> Try this with absolute movement
+            tcp_pos = self.robot.get_eef_pose().translation[:2]
+            obj_pos = obj_pose.translation[:2]
 
-                # Calculate reward if the TCP got closer to any of the objects
-                absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
+            # Calculate reward if the TCP got closer to any of the objects
+            absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
 
-                if self.current_step == 1:  # Initialize during the first step
-                    self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
-
-                # Delta = new distance - last distance
-                absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
+            if self.current_step == 1:  # Initialize during the first step
                 self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
 
-                if absolute_distance_delta < 0:  # if distance got closer, good, reward it
-                    current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                    self.moves_without_positive_reward = 0  # reset counter
-                    positive_reward_flag = True
-                    # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
-                else:
-                    if absolute_distance_delta > 0:  # if distance got further, punish it
-                        current_reward = (
-                            -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                        )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth
-                        # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
-                    else:
-                        current_reward = 0.0
+            # Delta = new distance - last distance
+            absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
+            self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
 
-                if current_reward != 0:
-                    logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+            if absolute_distance_delta < 0:  # if distance got closer, good, reward it
+                current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                self.moves_without_positive_reward = 0  # reset counter
+                positive_reward_flag = True
+                # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
+            else:
+                if absolute_distance_delta > 0:  # if distance got further, punish it
+                    current_reward = (
+                        -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                    )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth
+                    # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
                 else:
-                    logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+                    current_reward = 0.0
 
-                # Save distances and reward for DQNSupervisor
-                self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
-                self.distance_TCP_obj_rewards[i] = current_reward
+            total_reward += round(current_reward, 2)
+
+            if current_reward != 0:
+                logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+            else:
+                logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+
+            # Save distances and reward for DQNSupervisor
+            self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
+            self.distance_TCP_obj_rewards[i] = current_reward
 
         # Reward if the TCP came closer to any object
         if self.current_step != 1:
