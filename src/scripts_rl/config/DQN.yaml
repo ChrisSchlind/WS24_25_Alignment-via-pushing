@@ -72,6 +72,10 @@ model_path: "models/dqn/dqn_episode_final"
 plot_freq: 3
 plot_dir: "models/plot"
 
+# Parameters to determine if task is done
+success_threshold_trans: 0.03
+success_threshold_rot: 15.0
+
 # Testing parameters
 num_test_episodes: 10
 render_delay: 50  # milliseconds between frames
@@ -94,8 +98,6 @@ env:
   teletentric_camera: ${teletentric_camera}
   workspace_bounds: ${workspace_bounds}
   movement_bounds: ${movement_bounds}
-  success_threshold_trans: 0.05
-  succes_threshold_rot: 20.0
   max_steps: 200
   coordinate_axes_urdf_path: null
 #  step_size: 0.1
