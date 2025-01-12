@@ -72,7 +72,7 @@ class PrioritizedReplayBuffer:
         self.buffer.append([state, action, reward, next_state, done])
         self.priorities.append(priority)
 
-    def sample(self, batch_size, beta=0.4, reward_range=(-10.0, 10.0)):
+    def sample(self, batch_size, beta=0.4, reward_range=(-1.0, 1.0)):
         # Calculate the total priority of all experiences
         priorities = np.array(self.priorities)
         prob_dist = priorities / np.sum(priorities)
@@ -219,6 +219,9 @@ class DQNSupervisor:
         # Calculate orthogonal distance between the line (TCP, Area) and the object
         orthogonal_distance = self.orthogonal_distance(obj_pos, area_pos, tcp_pos)
 
+        # Calculate distance between the object and the area
+        obj_area_distance = np.linalg.norm(obj_pos - area_pos)
+
         # Calculate the random threshold for 90 degree movement
         random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
         logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
@@ -226,9 +229,9 @@ class DQNSupervisor:
         if orthogonal_distance < (obj.min_dist / 2):
             logger.debug(f"Supervisor said: Object is in line between TCP and Area and therefore move to object.")
 
-            # Randomize the movement to the object
-            rel_action[1] = movement[1] * random.uniform(0.8, 2.0)
-            rel_action[0] = movement[0] * random.uniform(0.8, 2.0)
+            # Randomize the movement to the object based on the distance between the object and the area
+            rel_action[1] = movement[1] * random.uniform((0.2 + abs(obj_area_distance)), (1.0 + abs(obj_area_distance)))
+            rel_action[0] = movement[0] * random.uniform((0.2 + abs(obj_area_distance)), (1.0 + abs(obj_area_distance)))
 
         elif np.linalg.norm(movement) < random_90degDistance_threshold:
             # If the object is not in line between TCP and Area, move to the side of the object
@@ -243,7 +246,7 @@ class DQNSupervisor:
         
         else:
             # Randomize the movement to the object and make it smaller so the supervisor does not push the object of the table
-            logger.debug(f"Supervisor said: Move a small distance to the object.")
+            logger.debug(f"Supervisor said: Move to the object.")
 
             # Randomize the movement to the object
             rel_action[1] = movement[1] * random.uniform(0.7, 0.9)
@@ -313,7 +316,7 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0.8,
+        epsilon=0.95,
         epsilon_min=0.1,
         epsilon_decay=0.9999,
         gamma=0.99,
@@ -378,9 +381,11 @@ class DQNAgent:
             
             action, pixels = self.choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
 
+            logger.debug(f"Action: {action} with max value at pixel: {pixels}")
+
             tmp_heatmap = copy.deepcopy(heatmap)
             tmp_heatmap[pixels[0],pixels[1]] = 1
-            cv2.imshow("heatmap", cv2.resize(tmp_heatmap, (1000, 1000), interpolation=cv2.INTER_NEAREST))
+            cv2.imshow("heatmap", cv2.resize(tmp_heatmap, (500, 500), interpolation=cv2.INTER_NEAREST))
             cv2.waitKey(1)
 
             self.agent_actions.append(action)  # Store agent actions for plotting
@@ -393,13 +398,13 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, beta=0.4, window_size=3):
+    def train(self, replay_buffer, batch_size=32, beta=0.4, window_size=2):
         
         if replay_buffer.size() < batch_size:
             return
 
         # Sample a batch from the prioritized replay buffer
-        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-10.0, 10.0))
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-1.0, 1.0))
 
         # Calculate target values for Q-learning
         targets = self.target_model(states).numpy()  # This is a heatmap
@@ -430,9 +435,13 @@ class DQNAgent:
                     if 0 <= nx < height and 0 <= ny < width:
                         targets[i, nx, ny] = target_value
 
+            # DEBUG: Mark the action location with a value of 1
+            #tmp_targets[pixel_x, pixel_y] = 1  # Mark the action location with a value of 1
+            #logger.debug(f"Action: {actions[i]} -> Pixel: {pixel_x, pixel_y} -> Target: {target_value}")
+
             # Display the target heatmap with the action location
             #cv2.imshow("target", cv2.resize(tmp_targets, (1000, 1000), interpolation=cv2.INTER_NEAREST))
-            #cv2.waitKey(1)
+            #cv2.waitKey(0)
 
         # Ensure no NaN values in targets or values
         targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")
@@ -529,14 +538,12 @@ class DQNAgent:
         max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
         min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
 
-        logger.debug(f"Max value: {max_pos}, Min value: {min_pos}")
-
         # Make pixel at max_value red and pixel at min_value blue
         heatmap_rgb[max_pos[0], max_pos[1], :] = [255, 255, 255]  # White
         heatmap_rgb[min_pos[0], min_pos[1], :] = [0, 0, 0]  # Black
 
         # Resize heatmap to 1000x1000
-        heatmap_resized = cv2.resize(heatmap_rgb, (1000, 1000), interpolation=cv2.INTER_NEAREST)
+        heatmap_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
 
         # Display the heatmap with OpenCV
         cv2.imshow("Heatmap", heatmap_resized)
@@ -640,6 +647,8 @@ def main(cfg: DictConfig) -> None:
         iou_reward_scale=cfg.iou_reward_scale,  # Pass the parameter
         no_movement_threshold=cfg.no_movement_threshold,
         max_moves_without_positive_reward=cfg.max_moves_without_positive_reward,
+        success_threshold_trans=cfg.success_threshold_trans,
+        success_threshold_rot=cfg.success_threshold_rot,
     )
 
     logger.info("Instantiation completed.")
