@@ -26,8 +26,8 @@ class PushingEnv(BulletEnv):
         iou_reward_scale,  # Add this parameter
         no_movement_threshold,
         max_moves_without_positive_reward,
-        success_threshold_trans=0.01,
-        succes_threshold_rot=0.01,
+        success_threshold_trans,
+        success_threshold_rot,
         max_steps=200,
         coordinate_axes_urdf_path=None,
     ):
@@ -39,7 +39,7 @@ class PushingEnv(BulletEnv):
         self.movement_bounds = movement_bounds
         self.step_size = step_size
         self.success_threshold_trans = success_threshold_trans
-        self.success_threshold_rot = succes_threshold_rot
+        self.success_threshold_rot = success_threshold_rot
         self.max_steps = max_steps
         self.current_step = 0
         self.current_task = None
@@ -264,7 +264,7 @@ class PushingEnv(BulletEnv):
                     current_reward = 15 + (current_reward - 15) * 0.75 if current_reward > 0 else -15 + (current_reward + 15) * 0.75
 
                 total_reward += round(current_reward, 2)
-                
+
                 if current_reward != 0:
                     logger.info(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
                 else:
@@ -288,44 +288,44 @@ class PushingEnv(BulletEnv):
 
             # ******************************************************************
             # Distance-based reward of TCP to object, only when relative movements are set up
-            # --> Try this with absolute movement
-            tcp_pos = self.robot.get_eef_pose().translation[:2]
-            obj_pos = obj_pose.translation[:2]
+            if self.absolut_movement == False:
+                tcp_pos = self.robot.get_eef_pose().translation[:2]
+                obj_pos = obj_pose.translation[:2]
 
-            # Calculate reward if the TCP got closer to any of the objects
-            absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
+                # Calculate reward if the TCP got closer to any of the objects
+                absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
 
-            if self.current_step == 1:  # Initialize during the first step
+                if self.current_step == 1:  # Initialize during the first step
+                    self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
+
+                # Delta = new distance - last distance
+                absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
                 self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
 
-            # Delta = new distance - last distance
-            absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
-            self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
-
-            if absolute_distance_delta < 0:  # if distance got closer, good, reward it
-                current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                self.moves_without_positive_reward = 0  # reset counter
-                positive_reward_flag = True
-                # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
-            else:
-                if absolute_distance_delta > 0:  # if distance got further, punish it
-                    current_reward = (
-                        -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                    )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth
-                    # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
+                if absolute_distance_delta < 0:  # if distance got closer, good, reward it
+                    current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                    self.moves_without_positive_reward = 0  # reset counter
+                    positive_reward_flag = True
+                    # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
                 else:
-                    current_reward = 0.0
+                    if absolute_distance_delta > 0:  # if distance got further, punish it
+                        current_reward = (
+                            -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                        )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth
+                        # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
+                    else:
+                        current_reward = 0.0
 
-            total_reward += round(current_reward, 2)
+                total_reward += round(current_reward, 2)
 
-            if current_reward != 0:
-                logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
-            else:
-                logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+                if current_reward != 0:
+                    logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+                else:
+                    logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
 
-            # Save distances and reward for DQNSupervisor
-            self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
-            self.distance_TCP_obj_rewards[i] = current_reward
+                # Save distances and reward for DQNSupervisor
+                self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
+                self.distance_TCP_obj_rewards[i] = current_reward
 
         # Reward if the TCP came closer to any object
         if self.current_step != 1:
@@ -386,7 +386,7 @@ class PushingEnv(BulletEnv):
             area_pos = self.get_pose(area.unique_id).translation[:2]
 
             if np.linalg.norm(obj_pos - area_pos) > self.success_threshold_trans:
-                logger.debug(f"Object {i} is not in its area with {np.linalg.norm(obj_pos - area_pos):.2f} distance.")
+                logger.debug(f"Object {i} is not in its area with {np.linalg.norm(obj_pos - area_pos):.2f} distance. Needed distance: {self.success_threshold_trans}.")
                 return False
             
             if not self._check_object_to_area_rotation(obj, area):
