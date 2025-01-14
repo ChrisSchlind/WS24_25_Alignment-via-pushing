@@ -180,10 +180,15 @@ class PushingEnv(BulletEnv):
         # Include additional info
         info = {"current_step": self.current_step, "max_steps": self.max_steps}
 
-        # Check if objects are inside workspace bounds
+        # Check if objects are outside workspace bounds
         if not self._check_objects():
             failed = True
-            logger.debug("Objects are outside workspace bounds.")
+            logger.info("Objects are outside workspace bounds.")
+
+        # Check if robot got himself into a weird position (e.g. axis 3 is on the ground)
+        if self.robot.get_eef_pose().translation[2] > (2 * self.fixed_z_height): # factor of 2 is needed because TCP is never at the exact height
+            failed = True
+            logger.info("Robot crashed himself trying to reach a non-optimal position. Resetting environment and stop this episode.")
 
         return next_state, reward, done, info, failed
 
@@ -287,50 +292,50 @@ class PushingEnv(BulletEnv):
                 logger.debug(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
 
             # ******************************************************************
-            # Distance-based reward of TCP to object, only when relative movements are set up
-            if self.absolut_movement == False:
-                tcp_pos = self.robot.get_eef_pose().translation[:2]
-                obj_pos = obj_pose.translation[:2]
+            # Distance-based reward of TCP to object
+            tcp_pos = self.robot.get_eef_pose().translation[:2]
+            obj_pos = obj_pose.translation[:2]
 
-                # Calculate reward if the TCP got closer to any of the objects
-                absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
+            # Calculate reward if the TCP got closer to any of the objects
+            absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
 
-                if self.current_step == 1:  # Initialize during the first step
-                    self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
-
-                # Delta = new distance - last distance
-                absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
+            if self.current_step == 1:  # Initialize during the first step
                 self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
 
-                if absolute_distance_delta < 0:  # if distance got closer, good, reward it
-                    current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                    self.moves_without_positive_reward = 0  # reset counter
-                    positive_reward_flag = True
-                    # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
+            # Delta = new distance - last distance
+            absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
+            self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
+
+            if absolute_distance_delta < 0:  # if distance got closer, good, reward it
+                current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                #self.moves_without_positive_reward = 0  # reset counter
+                #positive_reward_flag = True
+                # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
+            else:
+                if absolute_distance_delta > 0:  # if distance got further, punish it
+                    current_reward = (
+                        -1.5 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                    )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth --> this way the agent is forced to move to the object
+                    # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
                 else:
-                    if absolute_distance_delta > 0:  # if distance got further, punish it
-                        current_reward = (
-                            -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                        )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth
-                        # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
-                    else:
-                        current_reward = 0.0
+                    current_reward = 0.0
 
-                total_reward += round(current_reward, 2)
+            total_reward += round(current_reward, 2)
 
-                if current_reward != 0:
-                    logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
-                else:
-                    logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+            if current_reward != 0:
+                logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+            else:
+                logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
 
-                # Save distances and reward for DQNSupervisor
-                self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
-                self.distance_TCP_obj_rewards[i] = current_reward
+            # Save distances and reward for DQNSupervisor
+            self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
+            self.distance_TCP_obj_rewards[i] = current_reward
 
         # Reward if the TCP came closer to any object
-        if self.current_step != 1:
-            # If the TCP got closer to any object, reward it (max reward is the highest reward of all objects)
-            total_reward += max(self.distance_TCP_obj_rewards)  # Add the highest reward of all objects
+        # Not needed anymore, because the reward is already calculated in the loop above
+        #if self.current_step != 1:
+        #    # If the TCP got closer to any object, reward it (max reward is the highest reward of all objects)
+        #    total_reward += max(self.distance_TCP_obj_rewards)  # Add the highest reward of all objects
 
         # Copy current distance and IoU lists for next step
         self.old_dist = copy.deepcopy(self.dist_list)
@@ -359,16 +364,17 @@ class PushingEnv(BulletEnv):
         
         # Update old eef position
         self.old_eef_pos = copy.deepcopy(eef_pos)
+        
 
         # Punishment for not moving object or increasing IoU
         if self.moves_without_positive_reward >= self.max_moves_without_positive_reward:
-            penalty = 20 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) * 5 # increase penalty for every step after max_moves_without_positive_reward
+            penalty = 20 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) * 3 # increase penalty for every step after max_moves_without_positive_reward
             total_reward -= penalty
-            logger.debug(f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps.")
+            logger.info(f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps.")
 
         # if the agent is not moving an object or increasing the IoU, count up
         if not positive_reward_flag:
-            self.moves_without_positive_reward += 1        
+            self.moves_without_positive_reward += 1    
         """
 
         return total_reward
@@ -393,7 +399,7 @@ class PushingEnv(BulletEnv):
                 logger.debug(f"Object {i} is not aligned with its area.")
                 return False
             
-        logger.debug("All objects are in their areas.")
+        logger.info("All objects are in their areas.")
 
         # All objects are aligned
         return True
