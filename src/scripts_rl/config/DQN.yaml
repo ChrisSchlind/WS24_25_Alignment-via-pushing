@@ -45,7 +45,7 @@ absolut_movement: True
 no_movement_threshold: 0.02
 
 # Reward
-distance_obj_area_reward_scale: 1000
+distance_obj_area_reward_scale: 2000
 distance_TCP_obj_reward_scale: 25           # Faustregel: Faktor 20-50 kleiner als distance_obj_area_reward_scale
 iou_reward_scale: 2000
 max_moves_without_positive_reward: 3
@@ -69,11 +69,11 @@ model_dir: "models/dqn"
 model_path: "models/dqn/dqn_episode_final"
 
 # Plotting parameters (reward and epsilon)
-plot_freq: 3
+plot_freq: 10
 plot_dir: "models/plot"
 
 # Parameters to determine if task is done
-success_threshold_trans: 0.03
+success_threshold_trans: 0.02
 success_threshold_rot: 15.0
 
 # Testing parameters
