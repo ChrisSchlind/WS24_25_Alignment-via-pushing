@@ -32,7 +32,7 @@ class ConvDQN(tf.keras.Model):
         self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
 
         # Final Conv2D layer for the heatmap output (H, W, 1)
-        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', kernel_initializer=self.initializer)
+        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer) # tanh to get values between -1 and 1
 
     def call(self, x):
         # x: (batch_size, height, width, channels)
@@ -67,7 +67,7 @@ class PrioritizedReplayBuffer:
 
         # Increase the priority if the reward is positive
         if reward > 0:
-            priority *= 2.0
+            priority *= 3.0
 
         self.buffer.append([state, action, reward, next_state, done])
         self.priorities.append(priority)
@@ -112,26 +112,11 @@ class PrioritizedReplayBuffer:
 
             i += 1
 
-        # Initialize the normalized rewards
-        rewards_normalized = copy.deepcopy(rewards)
-
-        # Extract the min and max range from the reward_range
+        # Normalize the rewards to the desired range
+        # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
         reward_min_new, reward_max_new = reward_range
 
-        # Seperate normalization between positive and negative rewards
-        # Otherwise really big positive rewards would cause that smaller positive rewards become negative normalized rewards
-
-        # Normalize positive rewards from 0 to reward_max_new
-        positive_rewards = rewards[rewards > 0]
-        if len(positive_rewards) > 0:
-            positive_rewards_normalized = positive_rewards / reward_max * reward_max_new
-            rewards_normalized[rewards > 0] = positive_rewards_normalized
-
-        # Normalize negative rewards from 0 to reward_min_new
-        negative_rewards = rewards[rewards < 0]
-        if len(negative_rewards) > 0:
-            negative_rewards_normalized = negative_rewards / reward_min * reward_min_new
-            rewards_normalized[rewards < 0] = negative_rewards_normalized
+        rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
 
         logger.debug(f"Rewards: {rewards}")
         logger.debug(f"Normalized Rewards: {rewards_normalized}")
@@ -241,8 +226,8 @@ class DQNSupervisor:
             movement = np.array([movement[1], -movement[0]])
 
             # Randomize the movement to the side of the object
-            rel_action[1] = movement[1] * random.uniform(1, 1.3)
-            rel_action[0] = movement[0] * random.uniform(1, 1.3)
+            rel_action[1] = movement[1] * random.uniform(1, 1.2)
+            rel_action[0] = movement[0] * random.uniform(1, 1.2)
         
         else:
             # Randomize the movement to the object and make it smaller so the supervisor does not push the object of the table
@@ -319,6 +304,7 @@ class DQNAgent:
         epsilon=0.95,
         epsilon_min=0.1,
         epsilon_decay=0.9999,
+        supervisor_epsilon=0.5,
         gamma=0.99,
         input_shape=(84, 84, 4),
         weights_path="",
@@ -330,10 +316,14 @@ class DQNAgent:
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
+        self.supervisor_epsilon = supervisor_epsilon
         self.gamma = gamma
         self.input_shape = input_shape
         self.agent_actions = []  # Store only agent actions for plotting
         self.supervisor_actions = []  # Store only supervisor actions for plotting
+
+        # Set start episode to 0 if no weights are loaded
+        self.start_episode = 0
 
         # Create main and target networks
         self.model = ConvDQN()
@@ -349,10 +339,18 @@ class DQNAgent:
         if use_pretrained_best_model and weights_path:
             try:
                 weights_file_path = os.path.join(weights_dir, weights_path)
+
+                # Load the weights from the file
                 self.model.load_weights(weights_file_path)
                 logger.debug(f"Loaded weights from {weights_file_path}")
-                self.epsilon = 0.4  # expectation is that the model is already trained but ReplayBuffer is empty
-                logger.debug(f"Setting epsilon to {self.epsilon}")
+
+                # Extract the episode number from the weights file
+                self.start_episode = int(weights_path.split("_")[-1])
+
+                # Calculate the epsilon value based on the episode number and current set of parameters
+                self.epsilon = max(epsilon_min, epsilon * (epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
+                logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
+
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
         else:
@@ -363,16 +361,24 @@ class DQNAgent:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)  # Use the learning_rate parameter
 
     def get_action(self, state, supervisor, training=True):
-        if training and np.random.random() < self.epsilon:
-            # Ask supervisor for action
-            logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
-            action = supervisor.ask_supervisor()
-            self.supervisor_actions.append(action)  # Store supervisor actions for plotting
+        # Explanation of the epsilon-greedy strategy:
+        # With probability epsilon, take a random action (exploration) or ask the supervisor for an action
+        # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
 
-            '''logger.debug(f"Random action taken with {self.epsilon}")
-            action = np.random.uniform(-1, 1, self.action_dim)
-            self.supervisor_actions.append(action)'''
+        if training and np.random.random() < self.epsilon:
+
+            if np.random.random() < self.supervisor_epsilon:
+                # Ask supervisor for action
+                logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
+                action = supervisor.ask_supervisor()
+                self.supervisor_actions.append(action)  # Store supervisor actions for plotting
+            else:
+                logger.info(f"Random action taken with {self.epsilon:.2f} and supervisor epsilon {self.supervisor_epsilon:.2f}")
+                action = np.random.uniform(-1, 1, self.action_dim)
+                self.supervisor_actions.append(action)
+
             return action
+        
         else:
             logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
             state = np.expand_dims(state, axis=0)
@@ -381,7 +387,7 @@ class DQNAgent:
             
             action, pixels = self.choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
 
-            logger.debug(f"Action: {action} with max value at pixel: {pixels}")
+            #logger.debug(f"Action: {action} with max value at pixel: {pixels}")
 
             tmp_heatmap = copy.deepcopy(heatmap)
             tmp_heatmap[pixels[0],pixels[1]] = 1
@@ -398,10 +404,16 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, beta=0.4, window_size=2):
+    def train(self, replay_buffer, batch_size=32, beta=0.4, start_window_size=3, buffer_diff_factor=1000.0, mean_steps=200):
         
+        # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size:
             return
+        
+        # Calculate the window size for updating the heatmap based on the size of the replay buffer (aka number of steps)
+        x_0 = np.log(start_window_size - 1)
+        x = (replay_buffer.size() + (self.start_episode * mean_steps)) / buffer_diff_factor # Add the start episode and mean step amount to the replay buffer size
+        window_size = int(np.exp(x_0 - x ** 2) + 1) # Exponential decay of the window size fast at the beginning and slower later on, for big x the window size is 1
 
         # Sample a batch from the prioritized replay buffer
         states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-1.0, 1.0))
@@ -422,7 +434,7 @@ class DQNAgent:
 
             # Calculate the target value
             target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
-            logger.debug(f"Target value: {target_value} with min of target: {np.min(targets[i])} and max of target: {np.max(targets[i])}")
+            logger.debug(f"Target value: {target_value[0]:.2f}, Reward {rewards[i]:.2f}, min of target: {np.min(targets[i]):.2f} and max of target: {np.max(targets[i]):.2f}")
 
             # Create a temporary copy of the target heatmap for visualization
             #tmp_targets = copy.deepcopy(targets[i].squeeze())
@@ -434,6 +446,7 @@ class DQNAgent:
                     nx, ny = pixel_x + dx, pixel_y + dy
                     if 0 <= nx < height and 0 <= ny < width:
                         targets[i, nx, ny] = target_value
+                        #tmp_targets[nx, ny] = 1
 
             # DEBUG: Mark the action location with a value of 1
             #tmp_targets[pixel_x, pixel_y] = 1  # Mark the action location with a value of 1
@@ -727,7 +740,7 @@ def main(cfg: DictConfig) -> None:
         # Plot rewards and epsilon in the same graph and save in to file periodically
         if episode % cfg.plot_freq == 0 and episode > 0:
             plot_rewards_epsilons(rewards, epsilons, episode, cfg.plot_dir)
-            plot_actionHistory(agent.agent_actions, agent.supervisor_actions, cfg.plot_dir, episode)  # Plot agent and supervisor actions
+            #plot_actionHistory(agent.agent_actions, agent.supervisor_actions, cfg.plot_dir, episode)  # Plot agent and supervisor actions
 
         # Save model periodically
         if episode % cfg.save_freq == 0 and episode > 0:
