@@ -28,6 +28,11 @@ class PushingEnv(BulletEnv):
         max_moves_without_positive_reward,
         success_threshold_trans,
         success_threshold_rot,
+        activate_distance_obj_area_reward,
+        activate_distance_TCP_obj_reward,
+        activate_iou_reward,
+        activate_moves_without_positive_reward,
+        activate_no_movement_punishment,
         max_steps=200,
         coordinate_axes_urdf_path=None,
     ):
@@ -49,9 +54,14 @@ class PushingEnv(BulletEnv):
         self.absolut_movement = absolut_movement
         self.distance_TCP_obj_reward_scale = distance_TCP_obj_reward_scale
         self.distance_obj_area_reward_scale = distance_obj_area_reward_scale
-        self.iou_reward_scale = iou_reward_scale  # Initialize the attribute
+        self.iou_reward_scale = iou_reward_scale
         self.no_movement_threshold = no_movement_threshold
         self.max_moves_without_positive_reward = max_moves_without_positive_reward
+        self.activate_distance_obj_area_reward = activate_distance_obj_area_reward
+        self.activate_distance_TCP_obj_reward = activate_distance_TCP_obj_reward
+        self.activate_iou_reward = activate_iou_reward
+        self.activate_moves_without_positive_reward = activate_moves_without_positive_reward
+        self.activate_no_movement_punishment = activate_no_movement_punishment
         self.dist_list = []
         self.old_dist = []
         self.iou_list = []
@@ -63,7 +73,7 @@ class PushingEnv(BulletEnv):
         self.distance_TCP_obj_rewards = []
         self.absolute_obj_area_distances = []
         self.distance_obj_area_rewards = []
-        self.absolute_distance_TCP_obj_last = []  # Initialize the attribute
+        self.absolute_distance_TCP_obj_last = []
 
     def reset(self):
         """Reset environment and return initial state"""
@@ -186,7 +196,7 @@ class PushingEnv(BulletEnv):
             logger.info("Objects are outside workspace bounds.")
 
         # Check if robot got himself into a weird position (e.g. axis 3 is on the ground)
-        if self.robot.get_eef_pose().translation[2] > (2 * self.fixed_z_height): # factor of 2 is needed because TCP is never at the exact height
+        if self.robot.get_eef_pose().translation[2] > (30 * self.fixed_z_height):
             failed = True
             logger.info("Robot crashed himself trying to reach a non-optimal position. Resetting environment and stop this episode.")
 
@@ -232,6 +242,10 @@ class PushingEnv(BulletEnv):
         1. Distance-based reward of object to area
         2. IoU-based reward
         3. if(relativBewegungen): Distance-based reward of TCP to object
+
+
+        Idea:
+        Reduce the amount of rewards to just one per step, so that the agent is not overwhelmed by rewards. And can focus on the current task.
         """
 
         for i in range(len(self.current_task.push_objects)):
@@ -242,46 +256,47 @@ class PushingEnv(BulletEnv):
 
             # ******************************************************************
             # Distance-based reward of object to area
-            obj_pos = obj_pose.translation[:2]
-            area_pos = area_pose.translation[:2]
-            self.dist_list[i] = np.linalg.norm(obj_pos - area_pos)
+            if self.activate_distance_obj_area_reward:
+                obj_pos = obj_pose.translation[:2]
+                area_pos = area_pose.translation[:2]
+                self.dist_list[i] = np.linalg.norm(obj_pos - area_pos)
 
-            # Calculate reward based on distance between current and previous step
-            absolute_distance_obj_area = round((self.old_dist[i] - self.dist_list[i]), 3)  # Ensure assignment
+                # Calculate reward based on distance between current and previous step
+                absolute_distance_obj_area = round((self.old_dist[i] - self.dist_list[i]), 3)  # Ensure assignment
 
-            if self.current_step != 1:  # Skip first step because there is no previous step
-                if absolute_distance_obj_area > 0:  # ignore negative movement, only reward positive movement
-                    current_reward = absolute_distance_obj_area * self.distance_obj_area_reward_scale
-                    self.moves_without_positive_reward = 0  # reset counter
-                    positive_reward_flag = True
-                else:
-                    if absolute_distance_obj_area < 0:
-                        current_reward = (
-                            absolute_distance_obj_area * self.distance_obj_area_reward_scale * 0.25
-                        )  # "* 0.25" = reduced punishment for negative movements to motivate movements nontheless
+                if self.current_step != 1:  # Skip first step because there is no previous step
+                    if absolute_distance_obj_area > 0:  # ignore negative movement, only reward positive movement
+                        current_reward = absolute_distance_obj_area * self.distance_obj_area_reward_scale
+                        self.moves_without_positive_reward = 0  # reset counter
+                        positive_reward_flag = True
                     else:
-                        current_reward = 0.0
+                        if absolute_distance_obj_area < 0:
+                            current_reward = (
+                                absolute_distance_obj_area * self.distance_obj_area_reward_scale * 0.5
+                            )  # "* 0.5" = reduced punishment for negative movements to motivate movements nontheless (original: 0.25)
+                        else:
+                            current_reward = 0.0
 
-                # Apply curve to make very high rewards gradually smaller. This is so that accidental high rewards do not dominate the training but even small movements are rewarded
-                if abs(current_reward) > 40:
-                    current_reward = 40 + (current_reward - 40) * 0.5 if current_reward > 0 else -40 + (current_reward + 40) * 0.5
-                elif abs(current_reward) > 15:
-                    current_reward = 15 + (current_reward - 15) * 0.75 if current_reward > 0 else -15 + (current_reward + 15) * 0.75
+                    # Apply curve to make very high rewards gradually smaller. This is so that accidental high rewards do not dominate the training but even small movements are rewarded
+                    if abs(current_reward) > 40:
+                        current_reward = 40 + (current_reward - 40) * 0.5 if current_reward > 0 else -40 + (current_reward + 40) * 0.5
+                    elif abs(current_reward) > 15:
+                        current_reward = 15 + (current_reward - 15) * 0.75 if current_reward > 0 else -15 + (current_reward + 15) * 0.75
 
-                total_reward += round(current_reward, 2)
+                    total_reward += round(current_reward, 2)
 
-                if current_reward != 0:
-                    logger.info(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
-                else:
-                    logger.debug(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
+                    if current_reward != 0:
+                        logger.info(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
+                    else:
+                        logger.debug(f"Distance reward for object-area {i}: {round(current_reward, 2)}")
 
-                # Save distances and reward for DQNSupervisor
-                self.absolute_obj_area_distances[i] = absolute_distance_obj_area
-                self.distance_obj_area_rewards[i] = current_reward
+                    # Save distances and reward for DQNSupervisor
+                    self.absolute_obj_area_distances[i] = absolute_distance_obj_area
+                    self.distance_obj_area_rewards[i] = current_reward
 
             # ******************************************************************
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
-            if self.current_step != 1:
+            if self.activate_iou_reward and self.current_step != 1:
                 IOU = self.get_objects_intersection_volume(obj.unique_id, area.unique_id)
                 # relative_iou = IOU - self.old_iou[i]
                 absolute_iou = IOU * 10e6  # scale IoU to be greater than 0.1, currently all IoU values are XXXXe-09
@@ -293,49 +308,44 @@ class PushingEnv(BulletEnv):
 
             # ******************************************************************
             # Distance-based reward of TCP to object
-            tcp_pos = self.robot.get_eef_pose().translation[:2]
-            obj_pos = obj_pose.translation[:2]
+            if self.activate_distance_TCP_obj_reward:
+                tcp_pos = self.robot.get_eef_pose().translation[:2]
+                obj_pos = obj_pose.translation[:2]
 
-            # Calculate reward if the TCP got closer to any of the objects
-            absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
+                # Calculate reward if the TCP got closer to any of the objects
+                absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
 
-            if self.current_step == 1:  # Initialize during the first step
+                if self.current_step == 1:  # Initialize during the first step
+                    self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
+
+                # Delta = new distance - last distance
+                absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
                 self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
 
-            # Delta = new distance - last distance
-            absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
-            self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
-
-            if absolute_distance_delta < 0:  # if distance got closer, good, reward it
-                current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                #self.moves_without_positive_reward = 0  # reset counter
-                #positive_reward_flag = True
-                # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
-            else:
-                if absolute_distance_delta > 0:  # if distance got further, punish it
-                    current_reward = (
-                        -1.5 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                    )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth --> this way the agent is forced to move to the object
-                    # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
+                if absolute_distance_delta < 0:  # if distance got closer, good, reward it
+                    current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                    #self.moves_without_positive_reward = 0  # reset counter
+                    #positive_reward_flag = True
+                    # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
                 else:
-                    current_reward = 0.0
+                    if absolute_distance_delta > 0:  # if distance got further, punish it
+                        current_reward = (
+                            -2.0 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                        )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth --> this way the agent is forced to move to the object
+                        # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
+                    else:
+                        current_reward = 0.0
 
-            total_reward += round(current_reward, 2)
+                total_reward += round(current_reward, 2)
 
-            if current_reward != 0:
-                logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
-            else:
-                logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+                if current_reward != 0:
+                    logger.info(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
+                else:
+                    logger.debug(f"Distance reward for TCP-object {i}: {round(current_reward, 2)}")
 
-            # Save distances and reward for DQNSupervisor
-            self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
-            self.distance_TCP_obj_rewards[i] = current_reward
-
-        # Reward if the TCP came closer to any object
-        # Not needed anymore, because the reward is already calculated in the loop above
-        #if self.current_step != 1:
-        #    # If the TCP got closer to any object, reward it (max reward is the highest reward of all objects)
-        #    total_reward += max(self.distance_TCP_obj_rewards)  # Add the highest reward of all objects
+                # Save distances and reward for DQNSupervisor
+                self.absolute_TCP_obj_distances[i] = absolute_distance_delta  # Correct assignment
+                self.distance_TCP_obj_rewards[i] = current_reward
 
         # Copy current distance and IoU lists for next step
         self.old_dist = copy.deepcopy(self.dist_list)
@@ -343,39 +353,31 @@ class PushingEnv(BulletEnv):
 
         """
         PUNISHMENTS:
-        1. Moving outside movement bounds
-        2. Not moving at all
-        3. Not moving object or increasing IoU
-        """
-
-        """
-
-        # Punish for moving outside movement bounds
-        if self.movement_punishment:
-            total_reward -= 10.0
-            logger.debug("Negative reward -10.0 given for moving outside movement bounds.")        
+        1. Not moving at all
+        2. Not moving object or increasing IoU
+        """             
 
         # Punishment for not moving
-        eef_pos = self.robot.get_eef_pose().translation[:2]
-        if np.linalg.norm(eef_pos - self.old_eef_pos) < self.no_movement_threshold and self.current_step != 1:
-            total_reward -= 100.0
-            logger.debug("Negative reward -100.0 given for not moving.")
-        # No positive reward for moving because than the robot will just move around without any purpose
-        
-        # Update old eef position
-        self.old_eef_pos = copy.deepcopy(eef_pos)
-        
+        if self.activate_no_movement_punishment:
+            eef_pos = self.robot.get_eef_pose().translation[:2]
+            if np.linalg.norm(eef_pos - self.old_eef_pos) < self.no_movement_threshold and self.current_step != 1:
+                total_reward -= 100.0
+                logger.debug("Negative reward -100.0 given for not moving.")
+            # No positive reward for moving because than the robot will just move around without any purpose
+            
+            # Update old eef position
+            self.old_eef_pos = copy.deepcopy(eef_pos)               
 
         # Punishment for not moving object or increasing IoU
-        if self.moves_without_positive_reward >= self.max_moves_without_positive_reward:
-            penalty = 20 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) * 3 # increase penalty for every step after max_moves_without_positive_reward
-            total_reward -= penalty
-            logger.info(f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps.")
+        if self.activate_moves_without_positive_reward:
+            if self.moves_without_positive_reward >= self.max_moves_without_positive_reward:
+                penalty = 20 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) * 3 # increase penalty for every step after max_moves_without_positive_reward
+                total_reward -= penalty
+                logger.info(f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps.")
 
-        # if the agent is not moving an object or increasing the IoU, count up
-        if not positive_reward_flag:
-            self.moves_without_positive_reward += 1    
-        """
+            # if the agent is not moving an object or increasing the IoU, count up
+            if not positive_reward_flag:
+                self.moves_without_positive_reward += 1        
 
         return total_reward
 
@@ -392,11 +394,11 @@ class PushingEnv(BulletEnv):
             area_pos = self.get_pose(area.unique_id).translation[:2]
 
             if np.linalg.norm(obj_pos - area_pos) > self.success_threshold_trans:
-                logger.debug(f"Object {i} is not in its area with {np.linalg.norm(obj_pos - area_pos):.2f} distance. Needed distance: {self.success_threshold_trans}.")
+                #logger.debug(f"Object {i} is not in its area with {np.linalg.norm(obj_pos - area_pos):.2f} distance. Needed distance: {self.success_threshold_trans}.")
                 return False
             
             if not self._check_object_to_area_rotation(obj, area):
-                logger.debug(f"Object {i} is not aligned with its area.")
+                #logger.debug(f"Object {i} is not aligned with its area.")
                 return False
             
         logger.info("All objects are in their areas.")
@@ -461,10 +463,10 @@ class PushingEnv(BulletEnv):
             return True
 
         if obj.sym_axis == 1:
-            logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min/max: {0.00:.2f} degrees")
+            #logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min/max: {0.00:.2f} degrees")
             return angle <= self.success_threshold_rot
         else:
-            logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min: {0.00:.2f} and max: {180.0 / obj.sym_axis:.2f} degrees")
+            #logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min: {0.00:.2f} and max: {180.0 / obj.sym_axis:.2f} degrees")
             return angle <= self.success_threshold_rot or ((180.0 / obj.sym_axis) - angle) <= self.success_threshold_rot # Check if angle is within threshold for both directions
 
     def render(self):
