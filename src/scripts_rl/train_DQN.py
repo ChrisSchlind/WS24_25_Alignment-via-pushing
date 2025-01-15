@@ -18,7 +18,6 @@ from bullet_env.pushing_env import PushingEnv  # Add this import
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
-
 class ConvDQN(tf.keras.Model):
     def __init__(self, initializer=tf.keras.initializers.GlorotUniform()):
         super().__init__()
@@ -31,23 +30,31 @@ class ConvDQN(tf.keras.Model):
         self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
         self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
 
+        # Attention Map (Sigmoid to normalize the values between 0 and 1)
+        # Test if this improves the differentiation between object and area with similar shapes and colors
+        self.attention_map = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="sigmoid", kernel_initializer=self.initializer)
+
         # Final Conv2D layer for the heatmap output (H, W, 1)
-        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer) # tanh to get values between -1 and 1
+        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer)
 
     def call(self, x):
         # x: (batch_size, height, width, channels)
-
-        # Convolutional Layers
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
 
-        # Final heatmap (H, W, 1)
+        # Generate attention map
+        attention = self.attention_map(x)
+
+        # Apply attention to the last convolutional layer's output
+        x = x * attention
+
+        # Final heatmap
         x = self.heatmap(x)
 
-        # Return the heatmap (no activation because this is a continuous value map)
         return x  # Heatmap of dimension (batch_size, H, W, 1)
+
 
 
 class PrioritizedReplayBuffer:
@@ -67,7 +74,7 @@ class PrioritizedReplayBuffer:
 
         # Increase the priority if the reward is positive
         if reward > 0:
-            priority *= 3.0
+            priority *= 2.0
 
         self.buffer.append([state, action, reward, next_state, done])
         self.priorities.append(priority)
@@ -301,16 +308,17 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0.95,
+        epsilon=0.8,
         epsilon_min=0.1,
         epsilon_decay=0.9999,
-        supervisor_epsilon=0.5,
+        supervisor_epsilon=0.8,
         gamma=0.99,
         input_shape=(84, 84, 4),
         weights_path="",
         weights_dir="models/best",
         learning_rate=0.00025,  # Add learning_rate parameter
         use_pretrained_best_model=False,  # Add use_pretrained_best_model parameter
+        auto_set_epsilon=True,  # Add auto_set_epsilon parameter
     ):
         self.action_dim = action_dim
         self.epsilon = epsilon
@@ -319,6 +327,8 @@ class DQNAgent:
         self.supervisor_epsilon = supervisor_epsilon
         self.gamma = gamma
         self.input_shape = input_shape
+        self.use_pretrained_best_model = use_pretrained_best_model
+        self.auto_set_epsilon = auto_set_epsilon
         self.agent_actions = []  # Store only agent actions for plotting
         self.supervisor_actions = []  # Store only supervisor actions for plotting
 
@@ -336,7 +346,7 @@ class DQNAgent:
         self.target_model = ConvDQN()
         self.target_model(dummy_state)  # Initialize with correct shape
 
-        if use_pretrained_best_model and weights_path:
+        if self.use_pretrained_best_model and weights_path:
             try:
                 weights_file_path = os.path.join(weights_dir, weights_path)
 
@@ -348,8 +358,12 @@ class DQNAgent:
                 self.start_episode = int(weights_path.split("_")[-1])
 
                 # Calculate the epsilon value based on the episode number and current set of parameters
-                self.epsilon = max(epsilon_min, epsilon * (epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
-                logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
+                if self.auto_set_epsilon:
+                    self.epsilon = max(epsilon_min, epsilon * (epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
+                    logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
+                else:
+                    self.start_episode = 0
+                    logger.debug(f"Keeping epsilon at {self.epsilon:.2f} and reset the start episode number to 0")
 
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
@@ -662,9 +676,20 @@ def main(cfg: DictConfig) -> None:
         max_moves_without_positive_reward=cfg.max_moves_without_positive_reward,
         success_threshold_trans=cfg.success_threshold_trans,
         success_threshold_rot=cfg.success_threshold_rot,
+        activate_distance_obj_area_reward=cfg.activate_distance_obj_area_reward,
+        activate_distance_TCP_obj_reward=cfg.activate_distance_TCP_obj_reward,
+        activate_iou_reward=cfg.activate_iou_reward,
+        activate_moves_without_positive_reward=cfg.activate_moves_without_positive_reward,
+        activate_no_movement_punishment=cfg.activate_no_movement_punishment,
     )
 
     logger.info("Instantiation completed.")
+    logger.info("Starting training with following activated rewards:")
+    logger.info(f"Distance TCP-Object Reward: {cfg.activate_distance_TCP_obj_reward}")
+    logger.info(f"Distance Object-Area Reward: {cfg.activate_distance_obj_area_reward}")
+    logger.info(f"IoU Reward: {cfg.activate_iou_reward}")
+    logger.info(f"Moves without positive reward Reward: {cfg.activate_moves_without_positive_reward}")
+    logger.info(f"No movement punishment Reward: {cfg.activate_no_movement_punishment}")
 
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
@@ -682,6 +707,7 @@ def main(cfg: DictConfig) -> None:
         weights_dir=cfg.weights_dir,
         learning_rate=cfg.learning_rate,  # Pass the learning_rate from the config
         use_pretrained_best_model=cfg.use_pretrained_best_model,  # Pass the use_pretrained_best_model from the config
+        auto_set_epsilon=cfg.auto_set_epsilon,  # Pass the auto_set_epsilon from the config
     )
     logger.info("DQN supervisor and DQN agent initialized.")
     replay_buffer = PrioritizedReplayBuffer()
