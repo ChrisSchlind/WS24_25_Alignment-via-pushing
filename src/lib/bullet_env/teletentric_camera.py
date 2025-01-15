@@ -51,7 +51,7 @@ class TeletentricCamera(BulletCamera):
 
         # Ensure the position is within the image bounds
         if 0 <= eef_position_pixel[0] < self.resolution[0] and 0 <= eef_position_pixel[1] < self.resolution[1]:
-            color = cv2.circle(color, tuple(eef_position_pixel), radius=9, color=(255, 255, 255), thickness=-1)
+            color = cv2.circle(color, tuple(eef_position_pixel), radius=8, color=(0, 0, 0), thickness=-1)
 
         observation = {"rgb": color, "extrinsics": self.pose.matrix, "intrinsics": np.reshape(self.intrinsics, (3, 3)).astype(np.float32)}
         if self.record_depth:
