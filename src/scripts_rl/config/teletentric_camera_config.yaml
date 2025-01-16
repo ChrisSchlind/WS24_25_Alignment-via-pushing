@@ -11,6 +11,9 @@ intrinsics:
   - 0.0
   - 0.0
   - 1.0
+depth_range:
+- 0.05  # Adjusted minimum depth range
+- 1.0   # Adjusted maximum depth range
 record_depth: true
 orthographic_bounds:
   left: -0.45
