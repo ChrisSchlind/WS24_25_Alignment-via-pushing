@@ -308,7 +308,7 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0.8,
+        epsilon=0,
         epsilon_min=0.1,
         epsilon_decay=0.9999,
         supervisor_epsilon=0.8,

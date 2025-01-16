@@ -218,14 +218,13 @@ class PushingEnv(BulletEnv):
             depth = depth[:, :, 0]  # Take first channel if depth is 3D
         depth = cv2.resize(depth, (84, 84), interpolation=cv2.INTER_AREA)
 
-        # Normalize depth values between [0,1] and prevent division by zero
-        depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
+        # Note: Depth values are already normalized between [0,1] in the camera class
 
         # Add channel dimension to depth
         depth = depth[..., np.newaxis]
 
         # Concatenate RGB and depth into state
-        state = np.concatenate([rgb, depth], axis=-1)
+        state = np.concatenate([rgb, depth, depth, depth], axis=-1)
 
         # Ensure correct shape and type
         state = state.astype(np.float32)
@@ -324,8 +323,8 @@ class PushingEnv(BulletEnv):
 
                 if absolute_distance_delta < 0:  # if distance got closer, good, reward it
                     current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                    #self.moves_without_positive_reward = 0  # reset counter
-                    #positive_reward_flag = True
+                    # self.moves_without_positive_reward = 0  # reset counter
+                    # positive_reward_flag = True
                     # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
                 else:
                     if absolute_distance_delta > 0:  # if distance got further, punish it
@@ -355,7 +354,7 @@ class PushingEnv(BulletEnv):
         PUNISHMENTS:
         1. Not moving at all
         2. Not moving object or increasing IoU
-        """             
+        """
 
         # Punishment for not moving
         if self.activate_no_movement_punishment:
@@ -364,20 +363,24 @@ class PushingEnv(BulletEnv):
                 total_reward -= 100.0
                 logger.debug("Negative reward -100.0 given for not moving.")
             # No positive reward for moving because than the robot will just move around without any purpose
-            
+
             # Update old eef position
-            self.old_eef_pos = copy.deepcopy(eef_pos)               
+            self.old_eef_pos = copy.deepcopy(eef_pos)
 
         # Punishment for not moving object or increasing IoU
         if self.activate_moves_without_positive_reward:
             if self.moves_without_positive_reward >= self.max_moves_without_positive_reward:
-                penalty = 20 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) * 3 # increase penalty for every step after max_moves_without_positive_reward
+                penalty = (
+                    20 + (self.moves_without_positive_reward - self.max_moves_without_positive_reward) * 3
+                )  # increase penalty for every step after max_moves_without_positive_reward
                 total_reward -= penalty
-                logger.info(f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps.")
+                logger.info(
+                    f"Negative reward -{penalty} given for not moving object or increasing IoU for the last {self.moves_without_positive_reward} steps."
+                )
 
             # if the agent is not moving an object or increasing the IoU, count up
             if not positive_reward_flag:
-                self.moves_without_positive_reward += 1        
+                self.moves_without_positive_reward += 1
 
         return total_reward
 
@@ -394,13 +397,13 @@ class PushingEnv(BulletEnv):
             area_pos = self.get_pose(area.unique_id).translation[:2]
 
             if np.linalg.norm(obj_pos - area_pos) > self.success_threshold_trans:
-                #logger.debug(f"Object {i} is not in its area with {np.linalg.norm(obj_pos - area_pos):.2f} distance. Needed distance: {self.success_threshold_trans}.")
+                # logger.debug(f"Object {i} is not in its area with {np.linalg.norm(obj_pos - area_pos):.2f} distance. Needed distance: {self.success_threshold_trans}.")
                 return False
-            
+
             if not self._check_object_to_area_rotation(obj, area):
-                #logger.debug(f"Object {i} is not aligned with its area.")
+                # logger.debug(f"Object {i} is not aligned with its area.")
                 return False
-            
+
         logger.info("All objects are in their areas.")
 
         # All objects are aligned
@@ -436,14 +439,14 @@ class PushingEnv(BulletEnv):
         """
         # Relative rotation matrix
         relative_rot = np.dot(np.linalg.inv(rot1), rot2)
-        
+
         # Extract the angle from the trace of the relative rotation matrix
         angle_rad = np.arccos((np.trace(relative_rot) - 1) / 2)
-        
+
         # Convert to degrees
         angle_deg = np.degrees(angle_rad)
         return angle_deg
-    
+
     def _check_object_to_area_rotation(self, obj, area):
         """
         Check if the object is aligned with the area.
@@ -458,16 +461,18 @@ class PushingEnv(BulletEnv):
 
         # Use symmetry axis of object
         if obj.sym_axis > 0:
-            angle = (angle % int(180 / obj.sym_axis))
-        else: # e.g. round objects have inf. symmetry axis and are always aligned with the area, check value is -1
+            angle = angle % int(180 / obj.sym_axis)
+        else:  # e.g. round objects have inf. symmetry axis and are always aligned with the area, check value is -1
             return True
 
         if obj.sym_axis == 1:
-            #logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min/max: {0.00:.2f} degrees")
+            # logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min/max: {0.00:.2f} degrees")
             return angle <= self.success_threshold_rot
         else:
-            #logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min: {0.00:.2f} and max: {180.0 / obj.sym_axis:.2f} degrees")
-            return angle <= self.success_threshold_rot or ((180.0 / obj.sym_axis) - angle) <= self.success_threshold_rot # Check if angle is within threshold for both directions
+            # logger.debug(f"Angle between object and area with id {obj.unique_id}: {angle:.2f} degrees with min: {0.00:.2f} and max: {180.0 / obj.sym_axis:.2f} degrees")
+            return (
+                angle <= self.success_threshold_rot or ((180.0 / obj.sym_axis) - angle) <= self.success_threshold_rot
+            )  # Check if angle is within threshold for both directions
 
     def render(self):
         """Return the current camera view"""
@@ -476,7 +481,7 @@ class PushingEnv(BulletEnv):
     def close(self):
         """Close the environment"""
         self.bullet_client.disconnect()
-        logger.debug("Environment closed.")  
+        logger.debug("Environment closed.")
 
     def calculate_iou(self, mask1, mask2):
         """Calculate Intersection over Union (IoU) between two binary masks."""
