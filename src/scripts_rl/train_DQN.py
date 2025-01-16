@@ -651,7 +651,7 @@ def main(cfg: DictConfig) -> None:
 
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
-    input_shape = (84, 84, 4)  # RGB (3) + depth (1) = 4 channels
+    input_shape = (84, 84, 6)  # RGB (3) + 3 * depth (1) = 6  channels
     supervisor = DQNSupervisor(
         action_dim,
         env,
