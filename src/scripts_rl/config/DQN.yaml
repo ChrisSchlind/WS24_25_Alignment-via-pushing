@@ -43,9 +43,9 @@ absolut_movement: True
 
 # Reward
 # Idea: Only activate one reward at a time, to see the effect of each reward
-activate_distance_obj_area_reward: True
+activate_distance_obj_area_reward: False
 distance_obj_area_reward_scale: 2000
-activate_distance_TCP_obj_reward: False
+activate_distance_TCP_obj_reward: True
 distance_TCP_obj_reward_scale: 40 #25           # Faustregel: Faktor 20-50 kleiner als distance_obj_area_reward_scale
 activate_iou_reward: False
 iou_reward_scale: 2000
@@ -62,7 +62,7 @@ batch_size: 16
 target_update_freq: 100
 save_freq: 10
 learning_rate: 0.00005          # old value: 0.00025, trying a lower value now as the net seems to adpat too fast and be stuck at -1,-1
-use_pretrained_best_model: True
+use_pretrained_best_model: False
 auto_set_epsilon: False
 
 # Load pretrained model
