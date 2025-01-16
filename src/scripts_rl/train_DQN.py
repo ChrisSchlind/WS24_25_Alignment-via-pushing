@@ -17,6 +17,8 @@ from bullet_env.ur10_cell import UR10Cell  # Import UR10Cell
 from bullet_env.pushing_env import PushingEnv  # Add this import
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from transporter_network.resnet import ResNet
+
 
 class ConvDQN(tf.keras.Model):
     def __init__(self, initializer=tf.keras.initializers.GlorotUniform()):
@@ -24,36 +26,28 @@ class ConvDQN(tf.keras.Model):
         # Initializer for the weights
         self.initializer = initializer
 
-        # 4 Conv-Layers, each with 'same' padding to keep the output size the same as the input size
-        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
-        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
-        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
-        self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        # ResNet Block 1: 
+        self.resnet_block_1 = ResNet(kernel_size=(3, 3), output_depth=64, include_batchnorm=True)
 
-        # Attention Map (Sigmoid to normalize the values between 0 and 1)
-        # Test if this improves the differentiation between object and area with similar shapes and colors
-        self.attention_map = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="sigmoid", kernel_initializer=self.initializer)
+        # ResNet Block 2: 
+        self.resnet_block_2 = ResNet(kernel_size=(3, 3), output_depth=256, include_batchnorm=True)
 
-        # Final Conv2D layer for the heatmap output (H, W, 1)
-        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer)
+        # Conv2D layer for the heatmap output (H, W, 1)
+        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer) # tanh to get values between -1 and 1
 
-    def call(self, x):
-        # x: (batch_size, height, width, channels)
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
+    def call(self, inputs, **kwargs):
+        # First ResNet-Block
+        x = self.resnet_block_1(inputs)
 
-        # Generate attention map
-        attention = self.attention_map(x)
+        # Second ResNet-Block
+        x = self.resnet_block_2(x)
 
-        # Apply attention to the last convolutional layer's output
-        x = x * attention
-
-        # Final heatmap
+        # Final heatmap (H, W, 1)
         x = self.heatmap(x)
 
+        # Return the heatmap (no activation because this is a continuous value map)
         return x  # Heatmap of dimension (batch_size, H, W, 1)
+
 
 
 
