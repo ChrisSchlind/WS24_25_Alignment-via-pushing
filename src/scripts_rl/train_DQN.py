@@ -645,6 +645,7 @@ def main(cfg: DictConfig) -> None:
         activate_iou_reward=cfg.activate_iou_reward,
         activate_moves_without_positive_reward=cfg.activate_moves_without_positive_reward,
         activate_no_movement_punishment=cfg.activate_no_movement_punishment,
+        angle_obj_area_tcp_threshold=cfg.angle_obj_area_tcp_threshold,
     )
 
     logger.info("Instantiation completed.")
