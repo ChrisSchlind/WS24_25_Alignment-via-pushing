@@ -33,6 +33,7 @@ class PushingEnv(BulletEnv):
         activate_iou_reward,
         activate_moves_without_positive_reward,
         activate_no_movement_punishment,
+        angle_obj_area_tcp_threshold,
         max_steps=200,
         coordinate_axes_urdf_path=None,
     ):
@@ -62,6 +63,7 @@ class PushingEnv(BulletEnv):
         self.activate_iou_reward = activate_iou_reward
         self.activate_moves_without_positive_reward = activate_moves_without_positive_reward
         self.activate_no_movement_punishment = activate_no_movement_punishment
+        self.angle_obj_area_tcp_threshold = angle_obj_area_tcp_threshold
         self.dist_list = []
         self.old_dist = []
         self.iou_list = []
@@ -249,6 +251,9 @@ class PushingEnv(BulletEnv):
         """
 
         for i in range(len(self.current_task.push_objects)):
+            # Initialize reward for each object
+            current_reward = 0.0
+
             # Current objects and areas
             obj, area = self.current_task.get_object_and_area_with_same_id(i)
             obj_pose = self.get_pose(obj.unique_id)
@@ -265,7 +270,7 @@ class PushingEnv(BulletEnv):
                 absolute_distance_obj_area = round((self.old_dist[i] - self.dist_list[i]), 3)  # Ensure assignment
 
                 if self.current_step != 1:  # Skip first step because there is no previous step
-                    if absolute_distance_obj_area > 0:  # ignore negative movement, only reward positive movement
+                    if absolute_distance_obj_area > 0: 
                         current_reward = absolute_distance_obj_area * self.distance_obj_area_reward_scale
                         self.moves_without_positive_reward = 0  # reset counter
                         positive_reward_flag = True
@@ -311,6 +316,7 @@ class PushingEnv(BulletEnv):
             if self.activate_distance_TCP_obj_reward:
                 tcp_pos = self.robot.get_eef_pose().translation[:2]
                 obj_pos = obj_pose.translation[:2]
+                area_pos = area_pose.translation[:2]
 
                 # Calculate reward if the TCP got closer to any of the objects
                 absolute_distance_TCP_obj_new = round(np.linalg.norm(tcp_pos - obj_pos), 3)
@@ -322,19 +328,27 @@ class PushingEnv(BulletEnv):
                 absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
                 self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
 
-                if absolute_distance_delta < 0:  # if distance got closer, good, reward it
-                    current_reward = -1 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
-                    #self.moves_without_positive_reward = 0  # reset counter
-                    #positive_reward_flag = True
-                    # logger.info(f"Came closer to object {i} by {absolute_distance_delta} units, so reward with {current_reward}.")
-                else:
-                    if absolute_distance_delta > 0:  # if distance got further, punish it
+                if absolute_distance_TCP_obj_new > (obj.min_dist + 0.05): # Check if the distance is greater than the min_dist + 0.05
+
+                    if absolute_distance_delta < 0:
+                        current_reward = -1.0 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                    else:
                         current_reward = (
                             -2.0 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
                         )  # NO"*0.25" HERE!! = otherwise farming of rewards is easily possible by just moving back and forth --> this way the agent is forced to move to the object
-                        # logger.info(f"Moved away from object {i} by {absolute_distance_delta} units, so punish with {current_reward}.")
+                        
+                else:
+                    if self._check_angle_obj_tcp_area(area_pos, obj_pos, tcp_pos): # check if tcp is behind the object relative to the area
+
+                        logger.info(f"TCP is behind the object {i} relative to the area {i}.")
+
+                        if absolute_distance_delta < 0: # high positive reward if the TCP is behind the object and TCP is moving to object
+                            current_reward = -10.0 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                        else:
+                            current_reward = 0.0
+
                     else:
-                        current_reward = 0.0
+                        current_reward = -50.0 
 
                 total_reward += round(current_reward, 2)
 
@@ -380,6 +394,23 @@ class PushingEnv(BulletEnv):
                 self.moves_without_positive_reward += 1        
 
         return total_reward
+    
+    def _check_angle_obj_tcp_area(self, pos_area, pos_obj, pos_tcp):
+        rel_pos = np.array(pos_area) - np.array(pos_obj)
+        vec_obj_to_tcp = np.array(pos_tcp) - np.array(pos_obj)
+
+        theta = np.arctan2(rel_pos[1], rel_pos[0]) - np.arctan2(vec_obj_to_tcp[1], vec_obj_to_tcp[0])
+        
+        theta = np.mod(theta, 2 * np.pi)
+
+        theta = theta * 180.0 / np.pi # Convert to degrees
+        logger.debug(f"Angle between object and TCP with area {pos_area}: {theta:.2f} degrees")
+
+        # Check if angle is within threshold
+        if ((180.0 - self.angle_obj_area_tcp_threshold) <= theta <= (180.0 + self.angle_obj_area_tcp_threshold)):
+            return True
+        else:
+            return False
 
     def _check_done(self):
         """Check if episode should end"""
@@ -476,15 +507,7 @@ class PushingEnv(BulletEnv):
     def close(self):
         """Close the environment"""
         self.bullet_client.disconnect()
-        logger.debug("Environment closed.")  
-
-    def calculate_iou(self, mask1, mask2):
-        """Calculate Intersection over Union (IoU) between two binary masks."""
-        logger.debug(f"Calculating IoU between two masks of shape {mask1.shape} and {mask2.shape}")
-        intersection = np.logical_and(mask1, mask2).sum()
-        union = np.logical_or(mask1, mask2).sum()
-        iou = intersection / union if union != 0 else 0
-        return iou
+        logger.debug("Environment closed.")
 
     def get_tcp_pose(self):
         """Get the current pose of the TCP (Tool Center Point)"""
