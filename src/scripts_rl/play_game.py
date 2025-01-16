@@ -45,12 +45,7 @@ def update_observation_window(camera_factory, teletentric_camera, cfg, bullet_cl
 
     # Display height map from teletentric view
     if "depth" in teletentric_observation:
-        teletentric_image_depth = teletentric_observation["depth"]
-        # Normalize depth for visualization
-        depth_normalized = cv2.normalize(teletentric_image_depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        # Apply histogram equalization for better contrast
-        depth_equalized = cv2.equalizeHist(depth_normalized)
-        cv2.imshow("teletentric_heightmap", depth_equalized)
+        cv2.imshow("teletentric_depth", teletentric_observation["depth"])
 
 
 @hydra.main(version_base=None, config_path="config", config_name="play_game")
@@ -71,7 +66,8 @@ def main(cfg: DictConfig) -> None:
     teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center, robot=robot)
     draw_camera_direction(bullet_client, teletentric_camera.pose)
 
-    if(cfg.debug): logger.info("Instantiation completed.")
+    if cfg.debug:
+        logger.info("Instantiation completed.")
 
     robot.home()
     task = task_factory.create_task()
@@ -149,18 +145,22 @@ def main(cfg: DictConfig) -> None:
                 # Drive robot to fixed height and vertical stick alignment
                 new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], cfg.fixed_z_height]) * gripper_offset
 
-                if(cfg.debug): logger.debug(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
+                if cfg.debug:
+                    logger.debug(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
                 robot.ptp(new_pose)
-                if(cfg.debug): logger.debug("Robot movement completed")
+                if cfg.debug:
+                    logger.debug("Robot movement completed")
 
         if key_pressed == ord("r"):
             robot.ptp(start_pose)
             task.reset_env(env)
-            if(cfg.debug): logger.info("Environment reset completed")
+            if cfg.debug:
+                logger.info("Environment reset completed")
 
     # Shut down
     task.clean(env)
-    if(cfg.debug): logger.info("Task cleanup completed")
+    if cfg.debug:
+        logger.info("Task cleanup completed")
 
     with stdout_redirected():
         bullet_client.disconnect()
