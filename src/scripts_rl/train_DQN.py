@@ -79,17 +79,13 @@ class PrioritizedReplayBuffer:
         samples = [self.buffer[idx] for idx in indices]
         states, actions, rewards, next_states, dones = map(np.array, zip(*samples))
 
-        reward_min = np.min(rewards) + 10e-5 # Add small value to avoid division by zero
+        reward_min = np.min(rewards) + 1e-8 # Add small value to avoid division by zero
         reward_max = np.max(rewards)
 
         # Normalize the rewards to the desired range
         # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
         reward_min_new, reward_max_new = reward_range
         rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
-
-        logger.debug(f"Rewards: {rewards}")
-        logger.debug(f"Normalized Rewards: {rewards_normalized}")
-        logger.debug(f"Losses: {losses[indices]}")
 
         return states, actions, rewards_normalized, next_states, dones, indices, weights
 
@@ -269,7 +265,7 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0,
+        epsilon=0.8,
         epsilon_min=0.1,
         epsilon_decay=0.9999,
         supervisor_epsilon=0.8,
@@ -409,9 +405,6 @@ class DQNAgent:
 
             # Calculate the target value
             target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
-            
-            # Create a temporary copy of the target heatmap for visualization
-            #tmp_targets = copy.deepcopy(targets[i].squeeze())
 
             # Update target heatmap with a window_size around calculated pixel_x and pixel_y
             half_window = window_size // 2
@@ -420,15 +413,6 @@ class DQNAgent:
                     nx, ny = pixel_x + dx, pixel_y + dy
                     if 0 <= nx < height and 0 <= ny < width:
                         targets[i, nx, ny] = target_value
-                        #tmp_targets[nx, ny] = 1
-
-            # DEBUG: Mark the action location with a value of 1
-            #tmp_targets[pixel_x, pixel_y] = 1  # Mark the action location with a value of 1
-            #logger.debug(f"Action: {actions[i]} -> Pixel: {pixel_x, pixel_y} -> Target: {target_value}")
-
-            # Display the target heatmap with the action location
-            #cv2.imshow("target", cv2.resize(tmp_targets, (1000, 1000), interpolation=cv2.INTER_NEAREST))
-            #cv2.waitKey(0)
 
         # Ensure no NaN values in targets or values
         targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")
