@@ -55,91 +55,59 @@ class ConvDQN(tf.keras.Model):
 
         return x  # Heatmap of dimension (batch_size, H, W, 1)
 
-
-
 class PrioritizedReplayBuffer:
     def __init__(self, capacity=10000, alpha=0.6):
-        # Standard replay buffer
         self.buffer = deque(maxlen=capacity)
-        self.priorities = deque(maxlen=capacity)  # List of priorities
-        self.alpha = alpha  # Parameter that controls the priority scale
+        self.losses = deque(maxlen=capacity)  # Store losses instead of priorities
+        self.alpha = alpha
 
-    def _get_priority(self, error):
-        # Priority is calculated based on the TD error
-        return float((error + 1e-5) ** self.alpha)  # Avoid division by zero
-
-    def put(self, state, action, reward, next_state, done, error=1.0):
-        # Add experience with an initial priority
-        priority = self._get_priority(error / (1 + np.abs(error)))
-
-        # Increase the priority if the reward is positive
-        if reward > 0:
-            priority *= 2.0
-
+    # Add experience to the buffer with an initial high loss
+    def put(self, state, action, reward, next_state, done, initial_loss=1.0):
         self.buffer.append([state, action, reward, next_state, done])
-        self.priorities.append(priority)
+        self.losses.append(initial_loss)
 
+    # Sample a batch of experiences from the buffer based on loss
     def sample(self, batch_size, beta=0.4, reward_range=(-1.0, 1.0)):
-        # Calculate the total priority of all experiences
-        priorities = np.array(self.priorities)
-        prob_dist = priorities / np.sum(priorities)
-
-        # Initialize the rewards
+        losses = np.array(self.losses)
+        prob_dist = losses / np.sum(losses)
+        
         reward_min = 0
         reward_max = 0
 
-        i = 0
-        while (reward_min == 0 and reward_max == 0) or reward_min == reward_max:  # Avoid division by zero, sample again
-            # Select experiences based on priorities
-            indices = np.random.choice(len(self.buffer), batch_size, p=prob_dist)
+        # Sample half of the batch randomly and the other half based on the priority distribution
+        half_batch_size = batch_size // 2
+        indices_random = np.random.choice(len(self.buffer), half_batch_size, replace=False)
+        indices_prob = np.random.choice(len(self.buffer), batch_size - half_batch_size, p=prob_dist)
+        indices = np.concatenate((indices_random, indices_prob))
 
-            # Calculate Importance Sampling Weights
-            weights = (len(self.buffer) * prob_dist[indices]) ** (-beta)
-            weights /= weights.max()  # Normalize the weights
+        weights = (len(self.buffer) * prob_dist[indices]) ** (-beta)
+        weights /= weights.max()
 
-            # Retrieve the sampled experiences and their priorities
-            samples = [self.buffer[idx] for idx in indices]
-            states, actions, rewards, next_states, dones = map(np.array, zip(*samples))
+        samples = [self.buffer[idx] for idx in indices]
+        states, actions, rewards, next_states, dones = map(np.array, zip(*samples))
 
-            # Normalization of rewards
-            # Find the minimum and maximum of the rewards
-            reward_min = np.min(rewards)
-            reward_max = np.max(rewards)
-
-            if (reward_min == 0 and reward_max == 0) or reward_min == reward_max:
-                if i > 100:  ## Testing by Luis, if too many resampling attempts, return -1 norm. rewards
-                    logger.info("Resampling failed after 100 attempts, returning neutral values.")
-                    # set rewards to small random values
-                    rewards_normalized = np.random.uniform(-1.0, 1.0, batch_size)
-
-                    logger.debug(f"Normalized Rewards: {rewards_normalized}")
-                    logger.info(f"norm. rewardSum: {np.sum(rewards_normalized)}")
-
-                    return states, actions, rewards_normalized, next_states, dones, indices, weights
-
-            i += 1
+        reward_min = np.min(rewards) + 10e-5 # Add small value to avoid division by zero
+        reward_max = np.max(rewards)
 
         # Normalize the rewards to the desired range
         # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
         reward_min_new, reward_max_new = reward_range
-
         rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
 
         logger.debug(f"Rewards: {rewards}")
         logger.debug(f"Normalized Rewards: {rewards_normalized}")
-        logger.debug(f"norm. rewardSum: {np.sum(rewards_normalized)}")
+        logger.debug(f"Losses: {losses[indices]}")
 
         return states, actions, rewards_normalized, next_states, dones, indices, weights
 
-    def update_priorities(self, indices, errors):
-        # Update the priorities for the given indices based on the errors
-        for idx, error in zip(indices, errors):
-            priority = self._get_priority(error / (1 + np.abs(error)))
-            self.priorities[idx] = priority
+    # Update losses of sampled experiences
+    def update_losses(self, indices, new_loss):
+        for idx in indices:
+            self.losses[idx] = new_loss
 
+    # Get the size of the buffer
     def size(self):
         return len(self.buffer)
-
 
 class DQNSupervisor:
     def __init__(
@@ -418,10 +386,10 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, beta=0.4, start_window_size=3, buffer_diff_factor=1000.0, mean_steps=200):
+    def train(self, replay_buffer, batch_size=32, train_start_size=0, beta=0.4, start_window_size=3, buffer_diff_factor=1000.0, mean_steps=200):
         
         # Check if the replay buffer has enough samples to train
-        if replay_buffer.size() < batch_size:
+        if replay_buffer.size() < batch_size and replay_buffer.size() < train_start_size:
             return
         
         # Calculate the window size for updating the heatmap based on the size of the replay buffer (aka number of steps)
@@ -430,7 +398,7 @@ class DQNAgent:
         window_size = int(np.exp(x_0 - x ** 2) + 1) # Exponential decay of the window size fast at the beginning and slower later on, for big x the window size is 1
 
         # Sample a batch from the prioritized replay buffer
-        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta, reward_range=(-1.0, 1.0))
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
 
         # Calculate target values for Q-learning
         targets = self.target_model(states).numpy()  # This is a heatmap
@@ -448,8 +416,7 @@ class DQNAgent:
 
             # Calculate the target value
             target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
-            logger.debug(f"Target value: {target_value[0]:.2f}, Reward {rewards[i]:.2f}, min of target: {np.min(targets[i]):.2f} and max of target: {np.max(targets[i]):.2f}")
-
+            
             # Create a temporary copy of the target heatmap for visualization
             #tmp_targets = copy.deepcopy(targets[i].squeeze())
 
@@ -515,11 +482,8 @@ class DQNAgent:
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
 
-        # Calculate the error (difference between predicted value and target value)
-        errors = np.mean(np.abs(targets.numpy() - values.numpy()), axis=(1, 2, 3))
-
         # Update priorities in the replay buffer
-        replay_buffer.update_priorities(indices, errors)
+        replay_buffer.update_losses(indices, weighted_loss.numpy())  # Update losses in the replay buffer
 
         # Epsilon Annealing: Reduce epsilon after each training step
         if self.epsilon > self.epsilon_min:
