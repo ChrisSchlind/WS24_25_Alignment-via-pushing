@@ -55,13 +55,14 @@ class PrioritizedReplayBuffer:
         self.alpha = alpha
 
     # Add experience to the buffer with an initial high loss
-    def put(self, state, action, reward, next_state, done, initial_loss=1.0):
+    def put(self, state, action, reward, next_state, done, initial_loss=100.0):
         self.buffer.append([state, action, reward, next_state, done])
         self.losses.append(initial_loss)
 
     # Sample a batch of experiences from the buffer based on loss
     def sample(self, batch_size, beta=0.4, reward_range=(-1.0, 1.0)):
         losses = np.array(self.losses)
+        losses[-1] = np.max(losses[:-1]) # set the newest losses to the same magnitude as the previous ones
         prob_dist = losses / np.sum(losses)
         
         reward_min = 0
@@ -87,11 +88,15 @@ class PrioritizedReplayBuffer:
         reward_min_new, reward_max_new = reward_range
         rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
 
+        logger.debug(f"Rewards: {rewards}")
+        logger.debug(f"Normalized Rewards: {rewards_normalized}")
+        logger.debug(f"Losses: {losses[indices]}")
+
         return states, actions, rewards_normalized, next_states, dones, indices, weights
 
     # Update losses of sampled experiences
-    def update_losses(self, indices, new_loss):
-        for idx in indices:
+    def update_losses(self, indices, new_losses):
+        for idx, new_loss in zip(indices, new_losses):
             self.losses[idx] = new_loss
 
     # Get the size of the buffer
@@ -358,11 +363,10 @@ class DQNAgent:
             
             action, pixels = self.choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
 
-            #logger.debug(f"Action: {action} with max value at pixel: {pixels}")
-
             tmp_heatmap = copy.deepcopy(heatmap)
+            tmp_heatmap = (tmp_heatmap - np.min(tmp_heatmap)) / (np.max(tmp_heatmap) - np.min(tmp_heatmap)) # Normalize tmp_heatmap to the range [0, 1]
             tmp_heatmap[pixels[0],pixels[1]] = 1
-            cv2.imshow("heatmap", cv2.resize(tmp_heatmap, (500, 500), interpolation=cv2.INTER_NEAREST))
+            cv2.imshow("Original Grayscale Heatmap", cv2.resize(tmp_heatmap, (500, 500), interpolation=cv2.INTER_NEAREST))
             cv2.waitKey(1)
 
             self.agent_actions.append(action)  # Store agent actions for plotting
@@ -375,15 +379,16 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=1000, beta=0.4, start_window_size=3, buffer_diff_factor=1000.0, mean_steps=200):
+    def train(self, replay_buffer, batch_size=32, train_start_size=16, beta=0.4, start_window_size=3, buffer_diff_factor=1000.0, mean_steps=200):
         
         # Check if the replay buffer has enough samples to train
-        if replay_buffer.size() < batch_size and replay_buffer.size() < train_start_size:
+        if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
+            logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
             return
         
         # Calculate the window size for updating the heatmap based on the size of the replay buffer (aka number of steps)
         x_0 = np.log(start_window_size - 1)
-        x = (replay_buffer.size() + (self.start_episode * mean_steps)) / buffer_diff_factor # Add the start episode and mean step amount to the replay buffer size
+        x = max((replay_buffer.size() + (self.start_episode * mean_steps) - train_start_size), 0) / buffer_diff_factor # Add the start episode and mean step amount to the replay buffer size
         window_size = int(np.exp(x_0 - x ** 2) + 1) # Exponential decay of the window size fast at the beginning and slower later on, for big x the window size is 1
 
         # Sample a batch from the prioritized replay buffer
@@ -405,6 +410,8 @@ class DQNAgent:
 
             # Calculate the target value
             target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
+
+            logger.debug(f"Target value: {target_value} with reward: {rewards[i]}, min target: {np.min(targets[i])}, max target: {np.max(targets[i])}")
 
             # Update target heatmap with a window_size around calculated pixel_x and pixel_y
             half_window = window_size // 2
@@ -430,6 +437,8 @@ class DQNAgent:
 
             # Debugging the loss computation
             loss = tf.keras.losses.MSE(targets, values)  # Use manual MSE computation
+            logger.debug(f"Max Loss: {tf.reduce_max(loss)}")
+            logger.debug(f"Min Loss: {tf.reduce_min(loss)}")
 
             # Ensure no NaN values in the loss
             loss = tf.debugging.check_numerics(loss, message="Loss contains NaN or Inf")       
@@ -437,6 +446,7 @@ class DQNAgent:
             # Expand the weights to match the loss shape
             weights_expanded = tf.reshape(weights, [-1, 1, 1])  # Change the shape to (batch_size, 1, 1)
             weights_expanded = tf.broadcast_to(weights_expanded, loss.shape)  # Broadcast to the shape of loss (batch_size, H, W)
+            logger.debug(f"Weights: {weights}")
 
             # Cast the weights and loss to float32
             weights_expanded = tf.cast(weights_expanded, tf.float32)
@@ -444,9 +454,10 @@ class DQNAgent:
 
             # Apply the Importance Sampling Weights
             weighted_loss = weights_expanded * loss  # TensorFlow computation, maintaining the gradient flow
-            weighted_loss = tf.reduce_mean(weighted_loss)  # Average the loss over the batch
+            logger.debug(f"Max Weighted Loss: {tf.reduce_max(weighted_loss)}")
+            logger.debug(f"Min Weighted Loss: {tf.reduce_min(weighted_loss)}")
 
-        # Check if any gradients are None
+        # Compute the gradients
         grads = tape.gradient(weighted_loss, self.model.trainable_variables)
 
         # Debugging the gradients
@@ -459,8 +470,12 @@ class DQNAgent:
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
 
+        # Calculate mean loss of each sample in the batch
+        mean_loss = tf.reduce_mean(weighted_loss, axis=(1, 2))  # Calculate mean loss over height and width
+        logger.debug(f"Mean Loss: {mean_loss}")
+
         # Update priorities in the replay buffer
-        replay_buffer.update_losses(indices, weighted_loss.numpy())  # Update losses in the replay buffer
+        replay_buffer.update_losses(indices, mean_loss.numpy())  # Update losses in the replay buffer
 
         # Epsilon Annealing: Reduce epsilon after each training step
         if self.epsilon > self.epsilon_min:
@@ -499,6 +514,9 @@ class DQNAgent:
         normalized_y = 2 * global_index[1] / (width - 1) - 1
 
         # DEBUG: Convert heatmap to rgb, resize it to 1000x1000, make max value 255 and min value 0 and display it with opencv
+        # Normalize the heatmap to the range [0, 1]
+        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap))
+
         # Convert heatmap to RGB
         heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
 
@@ -514,7 +532,7 @@ class DQNAgent:
         heatmap_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
 
         # Display the heatmap with OpenCV
-        cv2.imshow("Heatmap", heatmap_resized)
+        cv2.imshow("RGB Heatmap", heatmap_resized)
         cv2.waitKey(1)
 
         return np.array([normalized_x, normalized_y]), global_index
