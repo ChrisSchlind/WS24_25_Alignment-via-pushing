@@ -327,9 +327,9 @@ class PushingEnv(BulletEnv):
                 absolute_distance_delta = absolute_distance_TCP_obj_new - self.absolute_distance_TCP_obj_last[i]
                 self.absolute_distance_TCP_obj_last[i] = absolute_distance_TCP_obj_new
 
-                if absolute_distance_TCP_obj_new > (obj.min_dist + 0.05): # Check if the distance is greater than the min_dist + 0.05
+                if absolute_distance_TCP_obj_new > obj.min_dist: # Check if the distance is greater than the min_dist
 
-                    if absolute_distance_delta < 0:
+                    if absolute_distance_delta < 0: # TCP is moving towards the object
                         current_reward = -1.0 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
                     else:
                         current_reward = (
@@ -342,12 +342,12 @@ class PushingEnv(BulletEnv):
                         logger.info(f"TCP is behind the object {i} relative to the area {i}.")
 
                         if absolute_distance_delta < 0: # high positive reward if the TCP is behind the object and TCP is moving to object
-                            current_reward = -10.0 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
+                            current_reward = -20.0 * absolute_distance_delta * self.distance_TCP_obj_reward_scale
                         else:
                             current_reward = 0.0
 
                     else:
-                        current_reward = -50.0 
+                        current_reward = -10.0 
 
                 total_reward += round(current_reward, 2)
 
