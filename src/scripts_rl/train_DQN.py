@@ -361,7 +361,7 @@ class DQNAgent:
             # Direct continuous output from network
             heatmap = self.model(state)[0].numpy()
             
-            action, pixels = self.choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
+            action, pixels = self._choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
 
             tmp_heatmap = copy.deepcopy(heatmap)
             tmp_heatmap = (tmp_heatmap - np.min(tmp_heatmap)) / (np.max(tmp_heatmap) - np.min(tmp_heatmap)) # Normalize tmp_heatmap to the range [0, 1]
@@ -435,6 +435,10 @@ class DQNAgent:
             if np.any(np.isnan(values.numpy())) or np.any(np.isnan(targets)):
                 raise ValueError("NaN detected in predictions or targets.")
 
+            # Normalize the heatmaps to the range [-1, 1] for the loss computation (otherwise the loss will be too smale: magnitude of 1e-4)
+            targets = self._normalize_heatmaps(targets)
+            values = self._normalize_heatmaps(values)           
+
             # Debugging the loss computation
             loss = tf.keras.losses.MSE(targets, values)  # Use manual MSE computation
             logger.debug(f"Max Loss: {tf.reduce_max(loss)}")
@@ -486,7 +490,7 @@ class DQNAgent:
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
 
-    def choose_action_from_max_area(self, heatmap, window_size=3):
+    def _choose_action_from_max_area(self, heatmap, window_size=3):
         # Squeeze the batch and channel dimensions
         heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
 
@@ -536,6 +540,27 @@ class DQNAgent:
         cv2.waitKey(1)
 
         return np.array([normalized_x, normalized_y]), global_index
+
+    def _normalize_heatmaps(self, heatmaps):
+        """
+        Normalize each heatmap individually to the range [-1, 1].
+        
+        Args:
+            heatmaps (tf.Tensor): Tensor of shape (batch_size, height, width).
+            
+        Returns:
+            tf.Tensor: Normalized heatmaps with the same shape as the input.
+        """
+        # Find the min and max values for each heatmap
+        min_vals = tf.reduce_min(heatmaps, axis=[1, 2], keepdims=True)  # Shape: (batch_size, 1, 1)
+        max_vals = tf.reduce_max(heatmaps, axis=[1, 2], keepdims=True)  # Shape: (batch_size, 1, 1)
+        
+        # Normalize each heatmap to [0, 1]
+        normalized = (heatmaps - min_vals) / (max_vals - min_vals + 1e-8)  # Avoid division by zero
+        
+        # Rescale to [-1, 1]
+        normalized = 2.0 * normalized - 1.0
+        return normalized
 
 
 def plot_actionHistory(agent_actions, supervisor_actions, plot_dir, episode):
