@@ -30,24 +30,23 @@ class ConvDQN(tf.keras.Model):
         self.resnet_block_1 = ResNet(kernel_size=(3, 3), output_depth=64, include_batchnorm=True)
 
         # ResNet Block 2: 
-        self.resnet_block_2 = ResNet(kernel_size=(3, 3), output_depth=256, include_batchnorm=True)
+        self.resnet_block_2 = ResNet(kernel_size=(3, 3), output_depth=256, include_batchnorm=True)        
 
         # Conv2D layer for the heatmap output (H, W, 1)
         self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer) # tanh to get values between -1 and 1
 
     def call(self, inputs, **kwargs):
-        logger.debug(f"Input shape: {inputs.shape}")
         # First ResNet-Block
         x = self.resnet_block_1(inputs)
-        logger.debug(f"ResNet-Block 1 shape: {x.shape}")
 
         # Second ResNet-Block
         x = self.resnet_block_2(x)
-        logger.debug(f"ResNet-Block 2 shape: {x.shape}")
 
+        # Conv2D layer to reduce size back to input shape (84x84)
+        x = tf.keras.layers.Conv2D(filters=x.shape[-1], kernel_size=(5, 5), strides=(1, 1), padding='valid')(x) # Kernel size and stride are chosen/calculated to reduce the size from 88x88 back to 84x84
+     
         # Final heatmap (H, W, 1)
         x = self.heatmap(x)
-        logger.debug(f"Heatmap shape: {x.shape}")
 
         # Return the heatmap (no activation because this is a continuous value map)
         return x  # Heatmap of dimension (batch_size, H, W, 1)
@@ -400,9 +399,6 @@ class DQNAgent:
         # Sample a batch from the prioritized replay buffer
         states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
 
-        logger.debug(f"Indices: {indices}")
-        logger.debug(f"Actions: {actions}")
-
         # Calculate target values for Q-learning
         targets = self.target_model(states).numpy()  # This is a heatmap
         next_value = np.max(self.target_model(next_states).numpy(), axis=(1, 2))  # Take max over height and width
@@ -417,17 +413,15 @@ class DQNAgent:
             pixel_x = int((action_x + 1) * (width - 1) / 2)  # Map action_x to heatmap width
             pixel_y = int((action_y + 1) * (height - 1) / 2)  # Map action_y to heatmap height
 
-            logger.debug(f"Action: {actions[i]} with pixel_x: {pixel_x} and pixel_y: {pixel_y}")
-
             # Calculate the target value
             target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
-
             logger.debug(f"Target value: {target_value} with reward: {rewards[i]}, min target: {np.min(targets[i])}, max target: {np.max(targets[i])}")
 
-            tmp_target = copy.deepcopy(targets[i])
-            tmp_target = (tmp_target - np.min(tmp_target)) / (np.max(tmp_target) - np.min(tmp_target)) # Normalize tmp_target to the range [0, 1]
-            cv2.imshow("Original Target Grayscale Heatmap", cv2.resize(tmp_target, (500, 500), interpolation=cv2.INTER_NEAREST))
-            cv2.waitKey(1)
+            # DEBUG: Display the original target heatmap and the updated target heatmap
+            #tmp_target = copy.deepcopy(targets[i])
+            #tmp_target = (tmp_target - np.min(tmp_target)) / (np.max(tmp_target) - np.min(tmp_target)) # Normalize tmp_target to the range [0, 1]
+            #cv2.imshow("Original Target Grayscale Heatmap", cv2.resize(tmp_target, (500, 500), interpolation=cv2.INTER_NEAREST))
+            #cv2.waitKey(1)
 
             # Update target heatmap with a window_size around calculated pixel_x and pixel_y
             half_window = window_size // 2
@@ -436,10 +430,11 @@ class DQNAgent:
                     nx, ny = pixel_x + dx, pixel_y + dy
                     if 0 <= nx < height and 0 <= ny < width:
                         targets[i, nx, ny] = target_value
-                        tmp_target[nx, ny] = 1
+                        #tmp_target[nx, ny] = 1
 
-            cv2.imshow("Updated Target Grayscale Heatmap", cv2.resize(tmp_target, (500, 500), interpolation=cv2.INTER_NEAREST))
-            cv2.waitKey(0)
+            # DEBUG: Display the updated target heatmap
+            #cv2.imshow("Updated Target Grayscale Heatmap", cv2.resize(tmp_target, (500, 500), interpolation=cv2.INTER_NEAREST))
+            #cv2.waitKey(0)
 
         # Ensure no NaN values in targets or values
         targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")

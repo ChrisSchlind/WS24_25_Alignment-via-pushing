@@ -72,6 +72,8 @@ Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve
         [-0.1, 0.1]: Netz konvergiert (hoffentlich) vieler langsamer und kann vorher policy lernen --> aktuelle Einstellung
         ==> Positiver Gesamtreward: Netz konvergiert gegen minus Unendlich
         ==> Negativer Gesamtreward: Netz konvergiert gegen plus Unendlich
+    - If a Convolutional Layer uses Zero-Padding (padding='same') and stride bigger than 1 (e.g. strides=(2,2)) it is possible that the size of the Tensor can change e.g. from 84x84 to 88x88
+        ==> This can specificaly happen while using the ResNet function because there multiple Conv.-Layer are using a stride of 2
 
 Muss noch bestätigt werden:
     - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
