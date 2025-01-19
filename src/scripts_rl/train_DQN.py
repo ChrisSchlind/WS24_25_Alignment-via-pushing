@@ -43,7 +43,10 @@ class ConvDQN(tf.keras.Model):
         x = self.resnet_block_2(x)
 
         # Conv2D layer to reduce size back to input shape (84x84)
-        x = tf.keras.layers.Conv2D(filters=x.shape[-1], kernel_size=(5, 5), strides=(1, 1), padding='valid')(x) # Kernel size and stride are chosen/calculated to reduce the size from 88x88 back to 84x84
+        #x = tf.keras.layers.Conv2D(filters=x.shape[-1], kernel_size=(5, 5), strides=(1, 1), padding='valid')(x) # Kernel size and stride are chosen/calculated to reduce the size from 88x88 back to 84x84
+
+        # Resize the heatmap to the desired output size to match the input size
+        x = tf.keras.layers.Resizing(inputs.shape[1], inputs.shape[2], interpolation='bilinear')(x)
      
         # Final heatmap (H, W, 1)
         x = self.heatmap(x)
@@ -363,7 +366,6 @@ class DQNAgent:
             state = np.expand_dims(state, axis=0)
             # Direct continuous output from network
             heatmap = self.model(state)[0].numpy()
-            logger.debug(f"Shape Heatmap: {heatmap.shape}")
             
             action, pixels = self._choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
             logger.debug(f"Action for Agent: {action} and pixels: {pixels}")
@@ -456,8 +458,6 @@ class DQNAgent:
 
             # Debugging the loss computation
             loss = tf.keras.losses.MSE(targets, values)  # Use manual MSE computation
-            logger.debug(f"Max Loss: {tf.reduce_max(loss)}")
-            logger.debug(f"Min Loss: {tf.reduce_min(loss)}")
 
             # Ensure no NaN values in the loss
             loss = tf.debugging.check_numerics(loss, message="Loss contains NaN or Inf")       
@@ -465,7 +465,6 @@ class DQNAgent:
             # Expand the weights to match the loss shape
             weights_expanded = tf.reshape(weights, [-1, 1, 1])  # Change the shape to (batch_size, 1, 1)
             weights_expanded = tf.broadcast_to(weights_expanded, loss.shape)  # Broadcast to the shape of loss (batch_size, H, W)
-            logger.debug(f"Weights: {weights}")
 
             # Cast the weights and loss to float32
             weights_expanded = tf.cast(weights_expanded, tf.float32)
@@ -491,7 +490,6 @@ class DQNAgent:
 
         # Calculate mean loss of each sample in the batch
         mean_loss = tf.reduce_mean(weighted_loss, axis=(1, 2))  # Calculate mean loss over height and width
-        logger.debug(f"Mean Loss: {mean_loss}")
 
         # Update priorities in the replay buffer
         replay_buffer.update_losses(indices, mean_loss.numpy())  # Update losses in the replay buffer
