@@ -78,6 +78,10 @@ Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve
         ==> Alternative wären Cropping/Clipping oder Resizen, aber in beiden Fällen würde man Informationen am Rand verlieren, 
             die zusätzlcihe Conv.-Schicht erhält diese Informationen und kann darüber hinaus weitere Schwerpunkte legen, nur das Training wird hierdurch länger
 
+        ==> Update nach 70 Epochen Training: Zusätzliche Conv.-Layer erzeugt komische Ein-Pixel-Dicke-Pixelreihe am Rand in welcher dann Max. und Min. Pixelwerte liegen und kein wirkliches Training stattfindet
+        ==> Wechsel auf Resize Funktion nach den ResNet-Blöcken zeigt bereits nach unter 10 Episoden diese Fragmente nicht mehr und erstmalig sind Cluster bzw. ROI in der Heatmap vom neuen ResNet-Netz sichtbar
+        ==> Wahrscheinlich wäre dieser Fehler auch durch sehr langes Training mit der zusätzlichen Conv.-Layer wegtrainiert werden können
+
 Muss noch bestätigt werden:
     - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
     Frage: Sind die Tiefenbilder richtig normiert, liegen diese im selben Bereich wie die RGB Bilder?
