@@ -75,6 +75,8 @@ Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve
     - Wenn eine Convolutional Layer Zero-Padding (padding='same') und einen größeren Stride als 1 (z.B. strides=(2,2)) verwendet, kann es passieren, dass sich die Größe des Tensors ändert, z.B. von 84x84 auf 88x88
         ==> Dies kann speziell bei der Verwendung der ResNet-Funktion passieren, da dort mehrere Conv.-Layer einen Stride von 2 verwenden
         ==> Mit einer neuen Conv.-Layer nach dem letzten ResNet-Block kann die Größe wieder auf die Eingangsgröße gebracht werden, Hierbei müssen aber kernel_size und stride genau ausgerechnet werden!!!
+        ==> Alternative wären Cropping/Clipping oder Resizen, aber in beiden Fällen würde man Informationen am Rand verlieren, 
+            die zusätzlcihe Conv.-Schicht erhält diese Informationen und kann darüber hinaus weitere Schwerpunkte legen, nur das Training wird hierdurch länger
 
 Muss noch bestätigt werden:
     - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
