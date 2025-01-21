@@ -36,6 +36,8 @@ class ConvDQN(tf.keras.Model):
         self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer) # tanh to get values between -1 and 1
 
     def call(self, inputs, **kwargs):
+        # Input shape: (batch_size, 88, 88, 6)
+
         # First ResNet-Block
         x = self.resnet_block_1(inputs)
 
@@ -45,8 +47,11 @@ class ConvDQN(tf.keras.Model):
         # Final heatmap (H, W, 1)
         x = self.heatmap(x)
 
+        # Delete the last 2 rows and columns to get the correct heatmap size and remove ResNet errors at the edges
+        x = tf.keras.layers.Cropping2D(cropping=((2, 2), (2, 2)))(x)
+
         # Return the heatmap (no activation because this is a continuous value map)
-        return x  # Heatmap of dimension (batch_size, H, W, 1)
+        return x  # Heatmap of dimension (batch_size, 84, 84, 1)
 
 class PrioritizedReplayBuffer:
     def __init__(self, capacity=10000, alpha=0.6):
@@ -87,10 +92,6 @@ class PrioritizedReplayBuffer:
         # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
         reward_min_new, reward_max_new = reward_range
         rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
-
-        logger.debug(f"Rewards: {rewards}")
-        logger.debug(f"Normalized Rewards: {rewards_normalized}")
-        logger.debug(f"Losses: {losses[indices]}")
 
         return states, actions, rewards_normalized, next_states, dones, indices, weights
 
@@ -273,7 +274,7 @@ class DQNAgent:
         epsilon=0.8,
         epsilon_min=0.1,
         epsilon_decay=0.9999,
-        supervisor_epsilon=0.8,
+        supervisor_epsilon=0.5,
         gamma=0.99,
         input_shape=(88, 88, 6),
         weights_path="",
@@ -358,18 +359,12 @@ class DQNAgent:
         else:
             logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
             state = np.expand_dims(state, axis=0)
+
             # Direct continuous output from network
-            heatmap = self.model(state)[0].numpy()
-            
+            heatmap = self.model(state)[0].numpy()  
+
             action, pixels = self._choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
             logger.debug(f"Action for Agent: {action} and pixels: {pixels}")
-
-            tmp_heatmap = copy.deepcopy(heatmap)
-            tmp_heatmap = (tmp_heatmap - np.min(tmp_heatmap)) / (np.max(tmp_heatmap) - np.min(tmp_heatmap)) # Normalize tmp_heatmap to the range [0, 1]
-            tmp_heatmap[pixels[0],pixels[1]] = 1
-            cv2.imshow("Original Grayscale Heatmap", cv2.resize(tmp_heatmap, (500, 500), interpolation=cv2.INTER_NEAREST))
-            cv2.waitKey(1)
-
             self.agent_actions.append(action)  # Store agent actions for plotting
 
         # Purge oldest actions if the length exceeds 10500
@@ -380,62 +375,43 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=16, beta=0.4, start_window_size=3, buffer_diff_factor=1000.0, mean_steps=200):
+    def train(self, replay_buffer, batch_size=32, train_start_size=500, beta=0.4):
         
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
             return
         
-        # Calculate the window size for updating the heatmap based on the size of the replay buffer (aka number of steps)
-        x_0 = np.log(start_window_size - 1)
-        x = max((replay_buffer.size() + (self.start_episode * mean_steps) - train_start_size), 0) / buffer_diff_factor # Add the start episode and mean step amount to the replay buffer size
-        window_size = int(np.exp(x_0 - x ** 2) + 1) # Exponential decay of the window size fast at the beginning and slower later on, for big x the window size is 1
+        # Initialize the pixel lists
+        pixel_x_list = []
+        pixel_y_list = []
 
         # Sample a batch from the prioritized replay buffer
         states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
 
         # Calculate target values for Q-learning
-        targets = self.target_model(states).numpy()  # This is a heatmap
-        next_value = np.max(self.target_model(next_states).numpy(), axis=(1, 2))  # Take max over height and width
+        targets = self.target_model(states).numpy()  # DO WE NEED THIS?
+        next_values = np.max(self.target_model(next_states).numpy(), axis=(1, 2)).squeeze()  # Take max over height and width
+        target_values = rewards + (1 - dones) * next_values * self.gamma # target_values is a numpy array with shape (16,)
 
-        # Update targets with actions from the replay buffer
-        for i in range(states.shape[0]):
+        # Ensure no NaN values in targets or values
+        targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")
+
+        # Calculate pixel coordinates of the actions
+        for i in range(len(actions)):
             # Retrieve action from replay buffer (values between -1 and 1)
             action_x, action_y = actions[i]
 
             # Convert the action from [-1, 1] to heatmap coordinates
             height, width = targets.shape[1], targets.shape[2]  # Assuming heatmap size (batch_size, H, W, 1)
             pixel_x = int((action_x + 1) * (width - 1) / 2)  # Map action_x to heatmap width
-            pixel_y = int((action_y + 1) * (height - 1) / 2)  # Map action_y to heatmap height
+            pixel_y = int((action_y + 1) * (height - 1) / 2)  # Map action_y to heatmap height  
 
-            # Calculate the target value
-            target_value = rewards[i] + (1 - dones[i]) * next_value[i] * self.gamma
-            logger.debug(f"Target value: {target_value} with reward: {rewards[i]}, min target: {np.min(targets[i])}, max target: {np.max(targets[i])}")
+            # Append the pixel coordinates to the lists
+            pixel_x_list.append(pixel_x)
+            pixel_y_list.append(pixel_y)
 
-            # DEBUG: Display the original target heatmap and the updated target heatmap
-            #tmp_target = copy.deepcopy(targets[i])
-            #tmp_target = (tmp_target - np.min(tmp_target)) / (np.max(tmp_target) - np.min(tmp_target)) # Normalize tmp_target to the range [0, 1]
-            #cv2.imshow("Original Target Grayscale Heatmap", cv2.resize(tmp_target, (500, 500), interpolation=cv2.INTER_NEAREST))
-            #cv2.waitKey(1)
-
-            # Update target heatmap with a window_size around calculated pixel_x and pixel_y
-            half_window = window_size // 2
-            for dx in range(-half_window, half_window + 1):
-                for dy in range(-half_window, half_window + 1):
-                    nx, ny = pixel_x + dx, pixel_y + dy
-                    if 0 <= nx < height and 0 <= ny < width:
-                        targets[i, nx, ny] = target_value
-                        #tmp_target[nx, ny] = 1
-
-            # DEBUG: Display the updated target heatmap
-            #cv2.imshow("Updated Target Grayscale Heatmap", cv2.resize(tmp_target, (500, 500), interpolation=cv2.INTER_NEAREST))
-            #cv2.waitKey(0)
-
-        # Ensure no NaN values in targets or values
-        targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")
-
-        # Calculate predictions
+        # Calculate lossses and update the model
         with tf.GradientTape() as tape:
             values = self.model(states)
 
@@ -444,30 +420,20 @@ class DQNAgent:
 
             # Ensure that values are not None or NaN
             if np.any(np.isnan(values.numpy())) or np.any(np.isnan(targets)):
-                raise ValueError("NaN detected in predictions or targets.")
+                raise ValueError("NaN detected in predictions or targets.")    
 
-            # Normalize the heatmaps to the range [-1, 1] for the loss computation (otherwise the loss will be too smale: magnitude of 1e-4)
-            targets = self._normalize_heatmaps(targets)
-            values = self._normalize_heatmaps(values)           
+            # Use pixel coordinates to extract the predicted values
+            values = tf.gather_nd(values, tf.stack([np.arange(len(values)), pixel_y_list, pixel_x_list], axis=1)) # values is Tensor with shape (16,1)
 
-            # Debugging the loss computation
-            loss = tf.keras.losses.MSE(targets, values)  # Use manual MSE computation
+            # Calculate the mean squared error loss
+            loss = tf.keras.losses.MSE(target_values, values)  # loss is a scalar tensor with shape (16,)
 
             # Ensure no NaN values in the loss
-            loss = tf.debugging.check_numerics(loss, message="Loss contains NaN or Inf")       
-
-            # Expand the weights to match the loss shape
-            weights_expanded = tf.reshape(weights, [-1, 1, 1])  # Change the shape to (batch_size, 1, 1)
-            weights_expanded = tf.broadcast_to(weights_expanded, loss.shape)  # Broadcast to the shape of loss (batch_size, H, W)
-
-            # Cast the weights and loss to float32
-            weights_expanded = tf.cast(weights_expanded, tf.float32)
-            loss = tf.cast(loss, tf.float32)
+            loss = tf.debugging.check_numerics(loss, message="Loss contains NaN or Inf")
 
             # Apply the Importance Sampling Weights
-            weighted_loss = weights_expanded * loss  # TensorFlow computation, maintaining the gradient flow
-            logger.debug(f"Max Weighted Loss: {tf.reduce_max(weighted_loss)}")
-            logger.debug(f"Min Weighted Loss: {tf.reduce_min(weighted_loss)}")
+            weighted_loss = weights * loss  # Element-wise multiplication, weighted_loss is a scalar tensor with shape(16,)
+            logger.debug(f"Weighted Loss: {weighted_loss}")
 
         # Compute the gradients
         grads = tape.gradient(weighted_loss, self.model.trainable_variables)
@@ -482,11 +448,8 @@ class DQNAgent:
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
 
-        # Calculate mean loss of each sample in the batch
-        mean_loss = tf.reduce_mean(weighted_loss, axis=(1, 2))  # Calculate mean loss over height and width
-
         # Update priorities in the replay buffer
-        replay_buffer.update_losses(indices, mean_loss.numpy())  # Update losses in the replay buffer
+        replay_buffer.update_losses(indices, weighted_loss.numpy())  # Update losses in the replay buffer
 
         # Epsilon Annealing: Reduce epsilon after each training step
         if self.epsilon > self.epsilon_min:
@@ -524,9 +487,22 @@ class DQNAgent:
         normalized_x = 2 * global_index[0] / (height - 1) - 1
         normalized_y = 2 * global_index[1] / (width - 1) - 1
 
-        # DEBUG: Convert heatmap to rgb, resize it to 1000x1000, make max value 255 and min value 0 and display it with opencv
+        # DEBUG: Convert heatmap to rgb, resize it to 500x500, make max value 255 and min value 0 and display it with opencv
         # Normalize the heatmap to the range [0, 1]
         heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap))
+
+        # Resize heatmap to 500x500
+        heatmap_resized = cv2.resize(heatmap, (500, 500), interpolation=cv2.INTER_NEAREST)
+
+        # Copy heatmap
+        copy_heatmap = copy.deepcopy(heatmap_resized)
+
+        # Change
+        copy_heatmap[global_index[0],global_index[1]] = 1
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Original Grayscale Heatmap", copy_heatmap)
+        cv2.waitKey(1)
 
         # Convert heatmap to RGB
         heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
@@ -539,35 +515,14 @@ class DQNAgent:
         heatmap_rgb[max_pos[0], max_pos[1], :] = [255, 255, 255]  # White
         heatmap_rgb[min_pos[0], min_pos[1], :] = [0, 0, 0]  # Black
 
-        # Resize heatmap to 1000x1000
-        heatmap_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
+        # Resize heatmap to 500x500
+        heatmap_rgb_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
 
         # Display the heatmap with OpenCV
-        cv2.imshow("RGB Heatmap", heatmap_resized)
-        cv2.waitKey(1)
+        cv2.imshow("RGB Heatmap", heatmap_rgb_resized)
+        cv2.waitKey(1)        
 
         return np.array([normalized_x, normalized_y]), global_index
-
-    def _normalize_heatmaps(self, heatmaps):
-        """
-        Normalize each heatmap individually to the range [-1, 1].
-        
-        Args:
-            heatmaps (tf.Tensor): Tensor of shape (batch_size, height, width).
-            
-        Returns:
-            tf.Tensor: Normalized heatmaps with the same shape as the input.
-        """
-        # Find the min and max values for each heatmap
-        min_vals = tf.reduce_min(heatmaps, axis=[1, 2], keepdims=True)  # Shape: (batch_size, 1, 1)
-        max_vals = tf.reduce_max(heatmaps, axis=[1, 2], keepdims=True)  # Shape: (batch_size, 1, 1)
-        
-        # Normalize each heatmap to [0, 1]
-        normalized = (heatmaps - min_vals) / (max_vals - min_vals + 1e-8)  # Avoid division by zero
-        
-        # Rescale to [-1, 1]
-        normalized = 2.0 * normalized - 1.0
-        return normalized
 
 
 def plot_actionHistory(agent_actions, supervisor_actions, plot_dir, episode):
