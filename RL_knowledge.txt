@@ -50,6 +50,28 @@ Lösung: Mehr Objekte im Task erzeugen, dass sowohl während des rumprobierens i
 Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve Dinge mit einem überproportional hohen Rewards belohnt werden, ohne eine Instabilität 
         des Trainings zu riskieren, wodurch es um ein vielfaches leichter wird zu trainieren
 
+4. Loss Berechnung:
+    - Loss Berechnung bei den Heatmaps funktioniert nicht, indem in den target heatmaps an der Stelle der Actions (in Pixelkoordianten) die berechneten target_values gesetzt werden und dann die kompletten Heatmaps
+      von targets und values für die Loss berechnung verwendet werden (War so ein Vorschlag von ChatGPT)
+    - TF kann zwar ein Loss berechnen (Tensor mit der Größe der Heatmap), aber wie genau der interpretierbar sein soll ist fraglich und die darauffolgenden Trainings haben gezeigt, dass der Agent nichts lernt
+
+Lösung: target_values und Pixelwerte aus values für Loss verwenden
+    - Stattdessen werden nun die b (batchsize) target_values mit den korrenspondierenden Pixelwerten (berechnet aus den Actions) aus den values heatmaps verwendet
+    - So liegen zwei Tensoren mit der Größe b (hier 16) vor und als Loss kommt ebenfalls ein Tensor mit der Größe b raus, welcher dann weiter gewichtet wird über die b weights aus dem Replay-Buffer
+    - In der Fassung sieht es aus als könnte das Netz trainieren
+    - Hier werden die target heatmaps für die aktuellen states jedoch nicht weiter verwendet --> so richtig?
+
+5. ResNet erzeugt Fragmente am Rand:
+    - Zusatz: Damit Zero-Padding bei ResNet funktioniert muss die Input shape durch 8 teilbar sein --> Daher Wechsel von 84x84 auf 88x88
+    - Die ausgegebenen Heatmaps zeigen am Rand sehr hohe und niedrige Pixelwerte, welche dann als Aktion gewählt werden
+
+Lösung: Cropping der Heatmap
+    - Initial wurde durch eine extra Conv.-Layer nach dem letzten ResNet-Block oder der Resize-Funktion von TF versucht, diese Fragmente zu entfernen
+    - Es zeigt sich aber, dass diese entweder gar nicht oder nur sehr sporadisch verschwinden
+    - Als robustere Methode hat sich erwiesen, einfach die ersten und letzten beiden Zeilen und Spalten zu entfernen (Cropping) und damit die Output Shape auf 84x84 zu reduzieren
+    - Nun enthalten die Heatmaps diese fehlerhafte Pixelreihe am Rand quasi nicht mehr
+    - Der tatsächliche Action-Space sollte hierdurch ebenfalls nicht eingeschränkt werden, da die finale Bewegung des Roboters auf Basis der movement_bounds bestimmt wirde
+
 --------------------------------------------------------------------------------------------------------
 #                                   Grundlegende Erkenntnisse:
 --------------------------------------------------------------------------------------------------------
