@@ -41,12 +41,6 @@ class ConvDQN(tf.keras.Model):
 
         # Second ResNet-Block
         x = self.resnet_block_2(x)
-
-        # Conv2D layer to reduce size back to input shape (84x84)
-        #x = tf.keras.layers.Conv2D(filters=x.shape[-1], kernel_size=(5, 5), strides=(1, 1), padding='valid')(x) # Kernel size and stride are chosen/calculated to reduce the size from 88x88 back to 84x84
-
-        # Resize the heatmap to the desired output size to match the input size
-        x = tf.keras.layers.Resizing(inputs.shape[1], inputs.shape[2], interpolation='bilinear')(x)
      
         # Final heatmap (H, W, 1)
         x = self.heatmap(x)
@@ -281,7 +275,7 @@ class DQNAgent:
         epsilon_decay=0.9999,
         supervisor_epsilon=0.8,
         gamma=0.99,
-        input_shape=(84, 84, 4),
+        input_shape=(88, 88, 6),
         weights_path="",
         weights_dir="models/best",
         learning_rate=0.00025,  # Add learning_rate parameter
@@ -691,7 +685,7 @@ def main(cfg: DictConfig) -> None:
 
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
-    input_shape = (84, 84, 6)  # RGB (3) + 3 * depth (1) = 6  channels
+    input_shape = (88, 88, 6)  # RGB (3) + 3 * depth (1) = 6  channels, 88x88 pixels size needed for ResNet (divisible by 8)
     supervisor = DQNSupervisor(
         action_dim,
         env,

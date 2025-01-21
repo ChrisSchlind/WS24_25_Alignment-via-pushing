@@ -88,7 +88,7 @@ render_delay: 50  # milliseconds between frames
 
 # Camera settings
 camera:
-  image_size: [84, 84]  # Standard size for DQN input
+  image_size: [88, 88]  # Standard size for DQN input
   orthographic: true
 
 # Supervisor settings
