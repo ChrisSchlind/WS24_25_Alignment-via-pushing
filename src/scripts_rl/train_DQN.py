@@ -34,7 +34,7 @@ class ConvDQN(tf.keras.Model):
         self.resnet_block_2 = ResNet(kernel_size=(3, 3), output_depth=256, include_batchnorm=True)        
 
         # Conv2D layer for the heatmap output (H, W, 1)
-        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="tanh", kernel_initializer=self.initializer) # tanh to get values between -1 and 1
+        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', kernel_initializer=self.initializer)
 
     def call(self, inputs, **kwargs):
         # Input shape: (batch_size, 88, 88, 6)
@@ -431,7 +431,7 @@ class DQNAgent:
             # Append the maximum Q-value from the local neighborhood
             next_values.append(heatmap_smoothed[global_index])
 
-        next_values = np.array(next_values)  # Convert list to numpy array (batch_size,)
+        next_values = np.array(next_values).squeeze()  # Convert list to numpy array (batch_size,)
 
         # Calculate target Q-values
         target_values = rewards + (1 - dones) * next_values * self.gamma
@@ -496,7 +496,7 @@ class DQNAgent:
 
         # DEBUG: Convert heatmap to rgb, resize it to 500x500, make max value 255 and min value 0 and display it with opencv
         # Normalize the heatmap to the range [0, 1]
-        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap))
+        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap) + 1e-8)
 
         # Resize heatmap to 500x500
         heatmap_resized = cv2.resize(heatmap, (500, 500), interpolation=cv2.INTER_NEAREST)
