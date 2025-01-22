@@ -18,6 +18,7 @@ from bullet_env.pushing_env import PushingEnv  # Add this import
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from transporter_network.resnet import ResNet
+import scipy.ndimage
 
 
 class ConvDQN(tf.keras.Model):
@@ -375,83 +376,89 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=500, beta=0.4):
-        
+    def train(self, replay_buffer, batch_size=32, train_start_size=500, beta=0.4, window_size=7):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
             return
-        
-        # Initialize the pixel lists
+
+        # Sample a batch from the replay buffer
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
+
+        # Predict heatmaps for the next states using the target model
+        target_heatmaps = self.target_model(next_states).numpy()  # (batch_size, H, W, 1)
+
+        # Initialize the list to store the maximum Q-values from the local neighborhood
+        next_values = []
         pixel_x_list = []
         pixel_y_list = []
 
-        # Sample a batch from the prioritized replay buffer
-        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
+        # Iterate through each heatmap to calculate the maximum Q-value within a local neighborhood of the current action
+        # This ignores artefacts and focuses on the most relevant part of the heatmap
+        # This explicit method to calculate the maximum Q-value only works because the heatmaps represents to total action space (of the robot, camera bounds and movement bounds need to match)
+        for i, heatmap in enumerate(target_heatmaps):
+            # Normalize the heatmap
+            heatmap_normalized = (heatmap - np.mean(heatmap)) / (np.std(heatmap) + 1e-8)
 
-        # Calculate target values for Q-learning
-        targets = self.target_model(states).numpy()  # DO WE NEED THIS?
-        next_values = np.max(self.target_model(next_states).numpy(), axis=(1, 2)).squeeze()  # Take max over height and width
-        target_values = rewards + (1 - dones) * next_values * self.gamma # target_values is a numpy array with shape (16,)
+            # Smooth the heatmap to reduce noise
+            heatmap_smoothed = scipy.ndimage.gaussian_filter(heatmap_normalized, sigma=1)
 
-        # Ensure no NaN values in targets or values
-        targets = tf.debugging.check_numerics(targets, message="targets contains NaN or Inf")
-
-        # Calculate pixel coordinates of the actions
-        for i in range(len(actions)):
-            # Retrieve action from replay buffer (values between -1 and 1)
+            # Convert action to pixel coordinates
             action_x, action_y = actions[i]
-
-            # Convert the action from [-1, 1] to heatmap coordinates
-            height, width = targets.shape[1], targets.shape[2]  # Assuming heatmap size (batch_size, H, W, 1)
-            pixel_x = int((action_x + 1) * (width - 1) / 2)  # Map action_x to heatmap width
-            pixel_y = int((action_y + 1) * (height - 1) / 2)  # Map action_y to heatmap height  
-
-            # Append the pixel coordinates to the lists
+            height, width = heatmap_smoothed.shape[:2]
+            pixel_x = int((action_x + 1) * (width - 1) / 2)
+            pixel_y = int((action_y + 1) * (height - 1) / 2)
+            
+            # Append pixel coordinates to the lists
             pixel_x_list.append(pixel_x)
             pixel_y_list.append(pixel_y)
 
-        # Calculate lossses and update the model
+            # Define the local window around the action's pixel
+            x_min = max(0, pixel_x - window_size // 2)
+            x_max = min(width, pixel_x + window_size // 2 + 1)
+            y_min = max(0, pixel_y - window_size // 2)
+            y_max = min(height, pixel_y + window_size // 2 + 1)
+
+            # Extract the local neighborhood
+            local_heatmap = heatmap_smoothed[y_min:y_max, x_min:x_max]
+
+            # Find the maximum value in the local neighborhood
+            max_index_local = np.unravel_index(np.argmax(local_heatmap), local_heatmap.shape)
+
+            # Map the local index back to global coordinates
+            global_index = (max_index_local[0] + y_min, max_index_local[1] + x_min)
+
+            # Append the maximum Q-value from the local neighborhood
+            next_values.append(heatmap_smoothed[global_index])
+
+        next_values = np.array(next_values)  # Convert list to numpy array (batch_size,)
+
+        # Calculate target Q-values
+        target_values = rewards + (1 - dones) * next_values * self.gamma
+
+        # Train the model
         with tf.GradientTape() as tape:
+            # Predict Q-values for the current states
             values = self.model(states)
+            
+            # Gather Q-values for the executed actions
+            values = tf.gather_nd(values, tf.stack([np.arange(len(values)), pixel_y_list, pixel_x_list], axis=1))
 
-            # Ensure no NaN values in predictions
-            values = tf.debugging.check_numerics(values, message="values contains NaN or Inf")
+            # Compute the loss
+            loss = tf.keras.losses.MSE(target_values, values)
+            weighted_loss = weights * loss
 
-            # Ensure that values are not None or NaN
-            if np.any(np.isnan(values.numpy())) or np.any(np.isnan(targets)):
-                raise ValueError("NaN detected in predictions or targets.")    
+            logger.debug(f"Weighted Loss: {weighted_loss.numpy()}")
 
-            # Use pixel coordinates to extract the predicted values
-            values = tf.gather_nd(values, tf.stack([np.arange(len(values)), pixel_y_list, pixel_x_list], axis=1)) # values is Tensor with shape (16,1)
-
-            # Calculate the mean squared error loss
-            loss = tf.keras.losses.MSE(target_values, values)  # loss is a scalar tensor with shape (16,)
-
-            # Ensure no NaN values in the loss
-            loss = tf.debugging.check_numerics(loss, message="Loss contains NaN or Inf")
-
-            # Apply the Importance Sampling Weights
-            weighted_loss = weights * loss  # Element-wise multiplication, weighted_loss is a scalar tensor with shape(16,)
-            logger.debug(f"Weighted Loss: {weighted_loss}")
-
-        # Compute the gradients
+        # Compute gradients and apply updates
         grads = tape.gradient(weighted_loss, self.model.trainable_variables)
-
-        # Debugging the gradients
-        if any(grad is None for grad in grads):
-            logger.error(
-                f"Gradients are None for the following layers: {[var.name for var, grad in zip(self.model.trainable_variables, grads) if grad is None]}"
-            )
-            raise ValueError("One or more gradients are None!")
-
         grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
 
         # Update priorities in the replay buffer
-        replay_buffer.update_losses(indices, weighted_loss.numpy())  # Update losses in the replay buffer
+        replay_buffer.update_losses(indices, weighted_loss.numpy())
 
-        # Epsilon Annealing: Reduce epsilon after each training step
+        # Perform epsilon annealing
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
