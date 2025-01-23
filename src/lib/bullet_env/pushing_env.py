@@ -208,17 +208,17 @@ class PushingEnv(BulletEnv):
         """Get RGB + depth observation from orthographic camera"""
         obs = self.teletentric_camera.get_observation()
 
-        # Resize RGB image (500x500x3 -> 88x88x3)
-        rgb = cv2.resize(obs["rgb"], (88, 88), interpolation=cv2.INTER_AREA)
+        # Resize RGB image (500x500x3 -> 84x84x3)
+        rgb = cv2.resize(obs["rgb"], (84, 84), interpolation=cv2.INTER_AREA)
 
         # Normalize RGB values between [0,1]
         rgb = rgb / 255.0
 
-        # Resize and normalize depth image (500x500 -> 88x88)
+        # Resize and normalize depth image (500x500 -> 84x84)
         depth = obs["depth"]
         if len(depth.shape) == 3:
             depth = depth[:, :, 0]  # Take first channel if depth is 3D
-        depth = cv2.resize(depth, (88, 88), interpolation=cv2.INTER_AREA)
+        depth = cv2.resize(depth, (84, 84), interpolation=cv2.INTER_AREA)
 
         # Note: Depth values are already normalized between [0,1] in the camera class
 
