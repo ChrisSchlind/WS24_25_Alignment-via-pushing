@@ -440,7 +440,7 @@ class PushingEnv(BulletEnv):
         # All objects are aligned
         return True
 
-    def _check_objects(self, extra_distance=0.05):
+    def _check_objects(self, extra_distance=0.0):
         """Check if all the objects are inside the workspace bounds"""
         counter = 0
         for i in range(len(self.current_task.push_objects)):

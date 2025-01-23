@@ -369,7 +369,7 @@ class DQNAgent:
             # Direct continuous output from network
             heatmap = self.model(state)[0].numpy()  
 
-            action, pixels = self._choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
+            action, pixels = self._choose_action_from_min_area(heatmap) # output is vector [x, y] with values between -1 and 1
             logger.debug(f"Action for Agent: {action} and pixels: {pixels}")
             self.agent_actions.append(action)  # Store agent actions for plotting
 
@@ -427,11 +427,11 @@ class DQNAgent:
             # Extract the local neighborhood
             local_heatmap = heatmap_smoothed[y_min:y_max, x_min:x_max]
 
-            # Find the maximum value in the local neighborhood
-            max_index_local = np.unravel_index(np.argmax(local_heatmap), local_heatmap.shape)
+            # Find the minium value in the local neighborhood
+            min_index_local = np.unravel_index(np.argmin(local_heatmap), local_heatmap.shape)
 
             # Map the local index back to global coordinates
-            global_index = (max_index_local[0] + y_min, max_index_local[1] + x_min)
+            global_index = (min_index_local[0] + y_min, min_index_local[1] + x_min)
 
             # Append the maximum Q-value from the local neighborhood
             next_values.append(heatmap_smoothed[global_index])
@@ -472,27 +472,27 @@ class DQNAgent:
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
 
-    def _choose_action_from_max_area(self, heatmap, window_size=3):
+    def _choose_action_from_min_area(self, heatmap, window_size=3):
         # Squeeze the batch and channel dimensions
         heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
 
-        # Find the position with the maximum value in the heatmap
-        max_index = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+        # Find the position with the minimum value in the heatmap
+        max_index = np.unravel_index(np.argmin(heatmap), heatmap.shape)
 
-        # Extract the window around the maximum value
+        # Extract the window around the minimum value
         i_min = max(max_index[0] - window_size // 2, 0)
         i_max = min(max_index[0] + window_size // 2 + 1, heatmap.shape[0])
         j_min = max(max_index[1] - window_size // 2, 0)
         j_max = min(max_index[1] + window_size // 2 + 1, heatmap.shape[1])
 
-        # Extract the local area around the maximum value
+        # Extract the local area around the minimum value
         local_area = heatmap[i_min:i_max, j_min:j_max]
 
-        # Find the maximum value in the local area
-        local_max_index = np.unravel_index(np.argmax(local_area), local_area.shape)
+        # Find the minimum value in the local area
+        local_min_index = np.unravel_index(np.argmin(local_area), local_area.shape)
 
         # Calculate the global index of the maximum value
-        global_index = (local_max_index[0] + i_min, local_max_index[1] + j_min)        
+        global_index = (local_min_index[0] + i_min, local_min_index[1] + j_min)        
 
         # Normalize the (i, j) position to the range [-1, 1]
         height, width = heatmap.shape
@@ -523,15 +523,15 @@ class DQNAgent:
         max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
         min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
 
-        # Make pixel at max_value red and pixel at min_value blue
-        heatmap_rgb[max_pos[0], max_pos[1], :] = [255, 255, 255]  # White
-        heatmap_rgb[min_pos[0], min_pos[1], :] = [0, 0, 0]  # Black
+        # Make pixel at max_value black and pixel at min_value white
+        heatmap_rgb[max_pos[0], max_pos[1], :] = [0, 0, 0]  # black
+        heatmap_rgb[min_pos[0], min_pos[1], :] = [255, 255, 255]  # white
 
         # Resize heatmap to 500x500
         heatmap_rgb_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
 
         # Display the heatmap with OpenCV
-        cv2.imshow("RGB Heatmap", heatmap_rgb_resized)
+        cv2.imshow("Spectrum Heatmap", heatmap_rgb_resized)
         cv2.waitKey(1)        
 
         return np.array([normalized_x, normalized_y]), global_index

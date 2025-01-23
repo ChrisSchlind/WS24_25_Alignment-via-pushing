@@ -82,7 +82,7 @@ class TeletentricCamera(BulletCamera):
             # add to RGB image
             color = cv2.circle(color, tuple(eef_position_pixel), radius=8, color=(255, 255, 255), thickness=-1)
             # add to depth image
-            depth = cv2.circle(depth, tuple(eef_position_pixel), radius=8, color=(0), thickness=-1)
+            depth = cv2.circle(depth, tuple(eef_position_pixel), radius=8, color=(0.11), thickness=-1)
 
         # normalize depth values
         depth = depth / depth.max()

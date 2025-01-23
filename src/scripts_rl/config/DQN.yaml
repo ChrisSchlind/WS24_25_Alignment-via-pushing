@@ -63,12 +63,12 @@ batch_size: 16
 target_update_freq: 100
 save_freq: 10
 learning_rate: 0.00005          # old value: 0.00025, trying a lower value now as the net seems to adpat too fast and be stuck at -1,-1
-use_pretrained_best_model: False
-auto_set_epsilon: False
+use_pretrained_best_model: True
+auto_set_epsilon: True
 
 # Load pretrained model
 weights_dir: "models/best"
-weights_path: ""
+weights_path: "dqn_episode_220"
 
 # Model parameters
 model_dir: "models/dqn"
