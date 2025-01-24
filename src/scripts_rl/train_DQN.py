@@ -277,10 +277,10 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0.5,
+        epsilon=0.8,
         epsilon_min=0.1,
-        epsilon_decay=0.9999,
-        supervisor_epsilon=0.5,
+        epsilon_decay=0.999,
+        supervisor_epsilon=0.7,
         gamma=0.99,
         input_shape=(84, 84, 6),
         weights_path="",
@@ -381,7 +381,7 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=1000, beta=0.4, window_size=5):
+    def train(self, replay_buffer, batch_size=32, train_start_size=7500, beta=0.4, window_size=5):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")

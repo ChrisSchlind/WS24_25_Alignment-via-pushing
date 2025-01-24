@@ -44,21 +44,21 @@ absolut_movement: True
 # Reward
 # Idea: Only activate one reward at a time, to see the effect of each reward
 activate_distance_obj_area_reward: True
-distance_obj_area_reward_scale: 4000
+distance_obj_area_reward_scale: 5000
 activate_distance_TCP_obj_reward: False
 distance_TCP_obj_reward_scale: 40 #25           # Faustregel: Faktor 20-50 kleiner als distance_obj_area_reward_scale
 angle_obj_area_tcp_threshold: 45.0 # in degree
 activate_iou_reward: True
-iou_reward_scale: 4000
+iou_reward_scale: 5000
 activate_moves_without_positive_reward: False
 max_moves_without_positive_reward: 5
 activate_no_movement_punishment: False
 no_movement_threshold: 0.02
-activate_objects_outside_workspace_punishment: False
+activate_objects_outside_workspace_punishment: True
 
 # Training parameters
 num_envs: 1
-num_episodes: 500    #10000
+num_episodes: 1000    #10000
 max_steps_per_episode: 100 #200
 batch_size: 16
 target_update_freq: 100
@@ -69,7 +69,7 @@ auto_set_epsilon: False
 
 # Load pretrained model
 weights_dir: "models/best"
-weights_path: "dqn_episode_960"
+weights_path: "dqn_episode_1680"
 
 # Model parameters
 model_dir: "models/dqn"

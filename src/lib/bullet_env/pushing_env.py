@@ -400,8 +400,8 @@ class PushingEnv(BulletEnv):
         # Punishment for objects outside workspace bounds
         if self.activate_objects_outside_workspace_punishment:
             if not self._check_objects():
-                total_reward -= 200.0
-                logger.info("Negative reward -200.0 given for objects outside workspace bounds.")
+                total_reward -= 100.0
+                logger.info("Negative reward -100.0 given for objects outside workspace bounds.")
 
         return total_reward
     
