@@ -277,7 +277,7 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0.8,
+        epsilon=0.5,
         epsilon_min=0.1,
         epsilon_decay=0.9999,
         supervisor_epsilon=0.5,
@@ -639,6 +639,7 @@ def main(cfg: DictConfig) -> None:
         activate_iou_reward=cfg.activate_iou_reward,
         activate_moves_without_positive_reward=cfg.activate_moves_without_positive_reward,
         activate_no_movement_punishment=cfg.activate_no_movement_punishment,
+        activate_objects_outside_workspace_punishment=cfg.activate_objects_outside_workspace_punishment,
         angle_obj_area_tcp_threshold=cfg.angle_obj_area_tcp_threshold,
     )
 

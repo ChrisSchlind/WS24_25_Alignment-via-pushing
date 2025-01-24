@@ -104,6 +104,12 @@ Lösung: Cropping der Heatmap
         ==> Wechsel auf Resize Funktion nach den ResNet-Blöcken zeigt bereits nach unter 10 Episoden diese Fragmente nicht mehr und erstmalig sind Cluster bzw. ROI in der Heatmap vom neuen ResNet-Netz sichtbar
         ==> Wahrscheinlich wäre dieser Fehler auch durch sehr langes Training mit der zusätzlichen Conv.-Layer wegtrainiert werden können
 
+    - Rewards schwierig einzustellen, da man schnell im subraum der aufgabe lokale minimas findet, anstatt die Aufgabe zu lösen und nur dafür einen reward zu get_object_and_area_with_same_id
+    - Implizit bedeutet, dass die Train function (Stand: 24.01.2025) funktioniert mit FCN ConvDQN hat statt ResNet, weil man aktionen des agenten aus rewardset ableiten kann oder versteht 
+    - Aus Heatmap globale Minimas als Pixel für die Aktion wählen anstatt globale Maximas (funktioniert irgendwie besser)
+    - Netz ohne tanh erlaubt längeres Training ohne clipping
+    - In heightmap TCP dunkler machen (also von 0.0 auf 0.11), damit prio auf objekt liegt
+
 Muss noch bestätigt werden:
     - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
     Frage: Sind die Tiefenbilder richtig normiert, liegen diese im selben Bereich wie die RGB Bilder?

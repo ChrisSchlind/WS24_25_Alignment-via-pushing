@@ -33,6 +33,7 @@ class PushingEnv(BulletEnv):
         activate_iou_reward,
         activate_moves_without_positive_reward,
         activate_no_movement_punishment,
+        activate_objects_outside_workspace_punishment,
         angle_obj_area_tcp_threshold,
         max_steps=200,
         coordinate_axes_urdf_path=None,
@@ -63,6 +64,7 @@ class PushingEnv(BulletEnv):
         self.activate_iou_reward = activate_iou_reward
         self.activate_moves_without_positive_reward = activate_moves_without_positive_reward
         self.activate_no_movement_punishment = activate_no_movement_punishment
+        self.activate_objects_outside_workspace_punishment = activate_objects_outside_workspace_punishment
         self.angle_obj_area_tcp_threshold = angle_obj_area_tcp_threshold
         self.dist_list = []
         self.old_dist = []
@@ -275,9 +277,7 @@ class PushingEnv(BulletEnv):
                         positive_reward_flag = True
                     else:
                         if absolute_distance_obj_area < 0:
-                            current_reward = (
-                                absolute_distance_obj_area * self.distance_obj_area_reward_scale * 0.5
-                            )  # "* 0.5" = reduced punishment for negative movements to motivate movements nontheless (original: 0.25)
+                            current_reward = abs(absolute_distance_obj_area * self.distance_obj_area_reward_scale * 0.1)
                         else:
                             current_reward = 0.0
 
@@ -368,6 +368,7 @@ class PushingEnv(BulletEnv):
         PUNISHMENTS:
         1. Not moving at all
         2. Not moving object or increasing IoU
+        3. Objects are outside workspace bounds
         """
 
         # Punishment for not moving
@@ -375,7 +376,7 @@ class PushingEnv(BulletEnv):
             eef_pos = self.robot.get_eef_pose().translation[:2]
             if np.linalg.norm(eef_pos - self.old_eef_pos) < self.no_movement_threshold and self.current_step != 1:
                 total_reward -= 100.0
-                logger.debug("Negative reward -100.0 given for not moving.")
+                logger.info("Negative reward -100.0 given for not moving.")
             # No positive reward for moving because than the robot will just move around without any purpose
 
             # Update old eef position
@@ -395,6 +396,12 @@ class PushingEnv(BulletEnv):
             # if the agent is not moving an object or increasing the IoU, count up
             if not positive_reward_flag:
                 self.moves_without_positive_reward += 1
+
+        # Punishment for objects outside workspace bounds
+        if self.activate_objects_outside_workspace_punishment:
+            if not self._check_objects():
+                total_reward -= 200.0
+                logger.info("Negative reward -200.0 given for objects outside workspace bounds.")
 
         return total_reward
     
