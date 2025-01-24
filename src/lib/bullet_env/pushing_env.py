@@ -308,7 +308,11 @@ class PushingEnv(BulletEnv):
                 if absolute_iou > 0:
                     self.moves_without_positive_reward = 0  # reset counter
                     positive_reward_flag = True
-                logger.debug(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
+
+                if absolute_iou != 0:
+                    logger.info(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
+                else:
+                    logger.debug(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
 
             # ******************************************************************
             # Distance-based reward of TCP to object
