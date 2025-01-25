@@ -300,19 +300,24 @@ class PushingEnv(BulletEnv):
 
             # ******************************************************************
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
-            if self.activate_iou_reward and self.current_step != 1:
+            if self.activate_iou_reward:  # Reward only when it's activated
                 IOU = self.get_objects_intersection_volume(obj.unique_id, area.unique_id)
-                # relative_iou = IOU - self.old_iou[i]
-                absolute_iou = IOU * 10e6  # scale IoU to be greater than 0.1, currently all IoU values are XXXXe-09
-                total_reward += round(absolute_iou * self.iou_reward_scale, 2)
-                if absolute_iou > 0:
-                    self.moves_without_positive_reward = 0  # reset counter
-                    positive_reward_flag = True
+                iou_delta = IOU - self.old_iou[i]
+                if self.current_step != 1:  # Skip the first step since old_iou is initially 0
+                    if iou_delta > 0:  # IOU got better -> positive reward
+                        current_reward = iou_delta * 1e6 * self.iou_reward_scale
+                        total_reward += round(current_reward, 2)
+                        self.moves_without_positive_reward = 0
+                        positive_reward_flag = True
+                        logger.info(f"IOU improvement reward for object {i}: {round(current_reward, 2)}")
+                    elif iou_delta < 0:  # IOU got worse -> currently no punishment
+                        # current_reward = iou_delta * 1e6 * self.iou_reward_scale * 0.1      # in this case iou_delta is negative, so the reward is negative and therefore the agent is punsihed
+                        current_reward = 0.0  # currently no punishment for decreasing IoU
+                        total_reward += round(current_reward, 2)
+                        logger.debug(f"IOU decreased for object {i}: {round(current_reward, 2)}")
 
-                if absolute_iou != 0:
-                    logger.info(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
-                else:
-                    logger.debug(f"IoU reward for object {i}: {round(absolute_iou * self.iou_reward_scale, 2)}")
+                # Update old_iou for next step
+                self.old_iou[i] = IOU
 
             # ******************************************************************
             # Distance-based reward of TCP to object
