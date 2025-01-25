@@ -56,11 +56,14 @@ class ConvDQN(tf.keras.Model):
         # Final heatmap
         x = self.heatmap(x)
 
+        # Crop the heatmap to the desired size of 84x84
+        x = tf.keras.layers.Cropping2D(cropping=((2, 2), (2, 2)))(x)
+
         # Return the heatmap (no activation because this is a continuous value map)
         return x  # Heatmap of dimension (batch_size, 84, 84, 1)
 
 class PrioritizedReplayBuffer:
-    def __init__(self, capacity=10000, alpha=0.6):
+    def __init__(self, capacity=20000, alpha=0.6):
         self.buffer = deque(maxlen=capacity)
         self.losses = deque(maxlen=capacity)  # Store losses instead of priorities
         self.alpha = alpha
@@ -279,10 +282,10 @@ class DQNAgent:
         action_dim,
         epsilon=0.8,
         epsilon_min=0.1,
-        epsilon_decay=0.999,
+        epsilon_decay=0.99995,
         supervisor_epsilon=0.7,
         gamma=0.99,
-        input_shape=(84, 84, 6),
+        input_shape=(88, 88, 6),
         weights_path="",
         weights_dir="models/best",
         learning_rate=0.00025,  # Add learning_rate parameter
@@ -381,7 +384,7 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=7500, beta=0.4, window_size=5):
+    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
@@ -653,7 +656,7 @@ def main(cfg: DictConfig) -> None:
 
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
-    input_shape = (84, 84, 6)  # RGB (3) + 3 * depth (1) = 6  channels
+    input_shape = (88, 88, 6)  # RGB (3) + 3 * depth (1) = 6  channels
     supervisor = DQNSupervisor(
         action_dim,
         env,
