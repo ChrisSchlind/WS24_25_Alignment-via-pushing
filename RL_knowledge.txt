@@ -72,6 +72,33 @@ Lösung: Cropping der Heatmap
     - Nun enthalten die Heatmaps diese fehlerhafte Pixelreihe am Rand quasi nicht mehr
     - Der tatsächliche Action-Space sollte hierdurch ebenfalls nicht eingeschränkt werden, da die finale Bewegung des Roboters auf Basis der movement_bounds bestimmt wirde
 
+6. Inhalt des ReplayBuffer wird mit der Zeit ersetzt, da dieser eine begrenzte Länge hat
+    - Nach 10.000 Steps wird Inhalt mit neuem Step ersetzt
+    - Zu Beginn ist Inhalt primär aus der Explorationsphase und damit wertvoll für das Training, je mehr Episoden trainiert wird, desto kleiner wird der Anteil an Informationen aus der Explorationsphase
+    - Problem besteht nun dabei, wenn der Agent selbst keine hilfreichen Trainingsdaten mehr erzeugt und der ReplayBuffer irgendwann nur aus "unnötigen" Schritt aus der Exploitation besteht
+    - Ab diesem Punkt macht es nicht wirklich Sinn weiter zu trainieren, da er keine Basis hat auf der sinnvoll trainiert werden kann --> Catastrophical Forgetting
+
+Lösung:
+    - train_start_size auf einen hohen Wert stellen (z.B. 5000), damit dieser vor dem Training und dem Umstieg von Exploration auf Exploitation mehr gutes Wissen im ReplayBuffer zur Verfügung hat
+    - Hohes initiales Epsilon (0.8) mit Epsilon decay nahe 1 (0.99995) --> Unterschied Graph Test 16 und zu 18
+    - Hierdurch enthält ReplayBuffer schon sinnvolle Daten und der Wechsel zur Eigenständigkeit des Agenten geschieht langsam --> er hat länger noch "Stützräder"
+    - Agent ist dann in der Lage während der Exploration den ReplayBuffer mit eigenen besseren Infos zu füllen, wobei der Anteil zu Beginn keinen zu großen Einfluss hat, da
+      bereits ReplayBuffer gut gefüllt ist mit sinnvollen Daten (Verteilung im samplen wird besser)
+    - ReplayBuffer auf 20.000 erweitert
+    - Gefüllter ReplayBuffer vor dem Start des Trainings muss "Proviant" sein, für das Training und den Wechsel von Exploration zu Exploitation und muss dem Agenten bis zur Autarkie reichen
+        ==> "Wenn ihm der ReplayBuffer ausgeht, bevor er es gelernt hat, dann kann er es nie lernen!"
+    - train_start_size auf 10.000 (Hälfte des ReplayBuffer)
+
+7. Fragmentpixel am Rand der Heatmaps:
+    - Überlegung, ob durch Zero-Padding am Rand falsch gefiltert wird
+    - Hiedurch könnten hohe Frequenzen vorkommen, die beim Falten verstärkt werden
+
+Lösung: Heatmap größer als Input und dann Croppen auf 84x84
+    - Image mit Inputgröße von 88x88 und dann durch Netz schleusen
+    - Im letzten Step Bild um 2 Pixel an allen Kanten croppen auf 84x84
+    - 2 Pixel müssten genügen, da bei Kernel_size von 3 und Zero-Padding die äußeren 2 Pixel hiervon beeinflusst werden
+    ==> funktioniert in den ersten Tests
+
 --------------------------------------------------------------------------------------------------------
 #                                   Grundlegende Erkenntnisse:
 --------------------------------------------------------------------------------------------------------
