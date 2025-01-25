@@ -35,19 +35,17 @@ class PushObjectFactory:
             push_args["offset"] = offset
 
         kwargs.update(push_args)
-
-        '''
+        
         # Generate random color if not specified
         if "color" not in kwargs:
             kwargs["color"] = [random.uniform(0.3, 1.0) for _ in range(3)] + [1.0] # change from random.random() to random.uniform(0.3, 1.0), prevents dark colors
 
             # Check that color is not white or light gray
             while np.linalg.norm(kwargs["color"]) > 2.5:
-                kwargs["color"] = [random.random() for _ in range(3)] + [1.0]
-        '''
+                kwargs["color"] = [random.random() for _ in range(3)] + [1.0]        
 
         # For testing purposes, set color to red
-        kwargs["color"] = [0.8, 0.2, 0.2, 1.0]
+        #kwargs["color"] = [0.8, 0.2, 0.2, 1.0]
 
         return PushObject(**kwargs)
 

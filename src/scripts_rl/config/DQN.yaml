@@ -54,7 +54,7 @@ activate_moves_without_positive_reward: False
 max_moves_without_positive_reward: 5
 activate_no_movement_punishment: False
 no_movement_threshold: 0.02
-activate_objects_outside_workspace_punishment: False
+activate_objects_outside_workspace_punishment: True
 
 # Training parameters
 num_envs: 1
