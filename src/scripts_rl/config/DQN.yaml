@@ -58,7 +58,7 @@ activate_objects_outside_workspace_punishment: False
 
 # Training parameters
 num_envs: 1
-num_episodes: 2000    #10000
+num_episodes: 3000    #10000
 max_steps_per_episode: 35 #200
 batch_size: 16
 target_update_freq: 100
