@@ -63,7 +63,7 @@ class ConvDQN(tf.keras.Model):
         return x  # Heatmap of dimension (batch_size, 84, 84, 1)
 
 class PrioritizedReplayBuffer:
-    def __init__(self, capacity=20000, alpha=0.6):
+    def __init__(self, capacity=50000, alpha=0.6):
         self.buffer = deque(maxlen=capacity)
         self.losses = deque(maxlen=capacity)  # Store losses instead of priorities
         self.alpha = alpha
@@ -282,7 +282,7 @@ class DQNAgent:
         action_dim,
         epsilon=0.8,
         epsilon_min=0.1,
-        epsilon_decay=0.99995,
+        epsilon_decay=0.9999,
         supervisor_epsilon=0.7,
         gamma=0.99,
         input_shape=(88, 88, 6),
