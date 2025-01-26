@@ -58,18 +58,18 @@ activate_objects_outside_workspace_punishment: True
 
 # Training parameters
 num_envs: 1
-num_episodes: 3000    #10000
-max_steps_per_episode: 35 #200
+num_episodes: 5000    #10000
+max_steps_per_episode: 45 #200
 batch_size: 16
 target_update_freq: 100
 save_freq: 10
 learning_rate: 0.00005          # old value: 0.00025, trying a lower value now as the net seems to adpat too fast and be stuck at -1,-1
-use_pretrained_best_model: False
+use_pretrained_best_model: True
 auto_set_epsilon: False
 
 # Load pretrained model
 weights_dir: "models/best"
-weights_path: ""
+weights_path: "dqn_episode_2080_luis" # example: "dqn_episode_1000"
 
 # Model parameters
 model_dir: "models/dqn"
