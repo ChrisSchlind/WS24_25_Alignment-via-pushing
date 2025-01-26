@@ -88,6 +88,7 @@ Lösung:
     - Gefüllter ReplayBuffer vor dem Start des Trainings muss "Proviant" sein, für das Training und den Wechsel von Exploration zu Exploitation und muss dem Agenten bis zur Autarkie reichen
         ==> "Wenn ihm der ReplayBuffer ausgeht, bevor er es gelernt hat, dann kann er es nie lernen!"
     - train_start_size auf 10.000 (Hälfte des ReplayBuffer)
+    ==> Vergleich zwischen verschiedenen Tetsreihen zeigt, dass das Auffüllen des ReplayBuffer vor dem eigentlichen Beginn des Trainings sehr sinnvoll ist und im Grunde das eigentlich Training überhaupt erst stabil möglich macht
 
 7. Fragmentpixel am Rand der Heatmaps:
     - Überlegung, ob durch Zero-Padding am Rand falsch gefiltert wird
@@ -97,7 +98,7 @@ Lösung: Heatmap größer als Input und dann Croppen auf 84x84
     - Image mit Inputgröße von 88x88 und dann durch Netz schleusen
     - Im letzten Step Bild um 2 Pixel an allen Kanten croppen auf 84x84
     - 2 Pixel müssten genügen, da bei Kernel_size von 3 und Zero-Padding die äußeren 2 Pixel hiervon beeinflusst werden
-    ==> funktioniert in den ersten Tests
+    ==> funktioniert in den ersten Tests und auch für langfristige Tests (> 1000 Episoden)
 
 --------------------------------------------------------------------------------------------------------
 #                                   Grundlegende Erkenntnisse:
