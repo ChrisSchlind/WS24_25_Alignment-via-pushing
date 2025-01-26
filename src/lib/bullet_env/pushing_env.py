@@ -276,10 +276,7 @@ class PushingEnv(BulletEnv):
                         self.moves_without_positive_reward = 0  # reset counter
                         positive_reward_flag = True
                     else:
-                        if absolute_distance_obj_area < 0:
-                            current_reward = abs(absolute_distance_obj_area * self.distance_obj_area_reward_scale * 0.1)
-                        else:
-                            current_reward = 0.0
+                        current_reward = 0.0
 
                     # Apply curve to make very high rewards gradually smaller. This is so that accidental high rewards do not dominate the training but even small movements are rewarded
                     if abs(current_reward) > 40:
