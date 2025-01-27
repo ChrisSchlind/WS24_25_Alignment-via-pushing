@@ -100,6 +100,14 @@ Lösung: Heatmap größer als Input und dann Croppen auf 84x84
     - 2 Pixel müssten genügen, da bei Kernel_size von 3 und Zero-Padding die äußeren 2 Pixel hiervon beeinflusst werden
     ==> funktioniert in den ersten Tests und auch für langfristige Tests (> 1000 Episoden)
 
+8. Training nicht stabil:
+    - Verschiedenste Testreihen haben gezeigt, dass kein Training möglich war
+
+Lösung:
+    - ReplayBuffer viel größer machen und zu Beginn des Trainings durch Supervisor und Random füllen bevor eigentliches Training beginnt
+    - Max. steps per episode sollte ca. 150% mal mehr sein, als die Anzahl an steps die man manuell/per Hand braucht um eine vergleichbare Aufgabe zu lösen --> jegliche Schritte danach bringen für das Training keinen großen Mehrwert
+    - Kleine Zahlen an max. steps per epsiode helfen stark und bringt Vorteil beim Training
+
 --------------------------------------------------------------------------------------------------------
 #                                   Grundlegende Erkenntnisse:
 --------------------------------------------------------------------------------------------------------

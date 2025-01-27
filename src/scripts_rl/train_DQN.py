@@ -282,8 +282,8 @@ class DQNAgent:
         action_dim,
         epsilon=0.8,
         epsilon_min=0.1,
-        epsilon_decay=0.9999,
-        supervisor_epsilon=0.7,
+        epsilon_decay=0.99995,
+        supervisor_epsilon=0.0,
         gamma=0.99,
         input_shape=(88, 88, 6),
         weights_path="",
@@ -295,6 +295,7 @@ class DQNAgent:
         self.action_dim = action_dim
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
+
         self.epsilon_decay = epsilon_decay
         self.supervisor_epsilon = supervisor_epsilon
         self.gamma = gamma

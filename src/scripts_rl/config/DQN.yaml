@@ -49,12 +49,12 @@ activate_distance_TCP_obj_reward: False
 distance_TCP_obj_reward_scale: 40 #25           # Faustregel: Faktor 20-50 kleiner als distance_obj_area_reward_scale
 angle_obj_area_tcp_threshold: 45.0 # in degree
 activate_iou_reward: True
-iou_reward_scale: 5000
+iou_reward_scale: 10000
 activate_moves_without_positive_reward: False
 max_moves_without_positive_reward: 5
 activate_no_movement_punishment: False
 no_movement_threshold: 0.02
-activate_objects_outside_workspace_punishment: True
+activate_objects_outside_workspace_punishment: False
 
 # Training parameters
 num_envs: 1
@@ -80,8 +80,8 @@ plot_freq: 10
 plot_dir: "models/plot"
 
 # Parameters to determine if task is done
-success_threshold_trans: 0.02
-success_threshold_rot: 360.0
+success_threshold_trans: 0.01
+success_threshold_rot: 22.5
 
 # Testing parameters
 num_test_episodes: 10
