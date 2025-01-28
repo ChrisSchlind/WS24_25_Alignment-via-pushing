@@ -117,169 +117,6 @@ class PrioritizedReplayBuffer:
     def size(self):
         return len(self.buffer)
 
-class DQNSupervisor:
-    def __init__(
-        self,
-        action_dim,
-        env,
-        workspace_bounds,
-        min_obj_area_threshold=0.04,
-        max_obj_area_threshold=0.6,
-        extra_distance=0.05,
-        sv_90deg_movement_threshold=0.1,
-    ):
-        self.action_dim = action_dim
-        self.env = env
-        self.workspace_bounds = workspace_bounds
-        self.min_obj_area_threshold = min_obj_area_threshold
-        self.max_obj_area_threshold = max_obj_area_threshold
-        self.extra_distance = extra_distance
-        self.sv_90deg_movement_threshold = sv_90deg_movement_threshold
-        self.last_id = 0
-
-    def ask_supervisor(self):
-        # Initialize action
-        rel_action = np.zeros(self.action_dim)
-        action = np.zeros(self.action_dim)
-
-        # Initialize id
-        id = 0
-
-        # Determine supervisor action as relative movement towards the object
-        # After that convert relative movement to absolute movement
-
-        # ----------------- Relative Movement -----------------
-
-        # Calculate movement towards the object
-        tcp_pose = self.env.get_tcp_pose()
-        tcp_pos = tcp_pose.translation[:2]
-
-        # Check for the nearest object to the TCP
-        min_distance = float("inf")
-        for i in range(len(self.env.current_task.push_objects)):
-            obj, area = self.env.current_task.get_object_and_area_with_same_id(i)
-            obj_pose = self.env.get_pose(obj.unique_id)
-            area_pose = self.env.get_pose(area.unique_id)
-            obj_pos = obj_pose.translation[:2]
-            area_pos = area_pose.translation[:2]
-
-            # skip objects that are already in the area and aligned with the area, important if more than one object is in the task
-            if (
-                np.linalg.norm(obj_pos - area_pos) > self.env.success_threshold_trans 
-                and self.env._check_object_to_area_rotation(obj, area)
-            ):
-                continue
-
-            dist = np.linalg.norm(obj_pos - tcp_pos)
-            if dist < min_distance:
-                min_distance = dist
-                id = i
-
-        obj, area = self.env.current_task.get_object_and_area_with_same_id(id)            
-        obj_pose = self.env.get_pose(obj.unique_id)
-        area_pose = self.env.get_pose(area.unique_id)
-        obj_pos = obj_pose.translation[:2]
-        area_pos = area_pose.translation[:2]
-
-        # Movement/Distance&Direction between TCP and object
-        movement = obj_pos - tcp_pos
-
-        # Calculate orthogonal distance between the line (TCP, Area) and the object
-        orthogonal_distance = self.orthogonal_distance(obj_pos, area_pos, tcp_pos)
-
-        # Calculate distance between the object and the area
-        obj_area_distance = np.linalg.norm(obj_pos - area_pos)
-
-        # Calculate the random threshold for 90 degree movement
-        random_90degDistance_threshold = self.sv_90deg_movement_threshold * random.uniform(0.8, 1.2)
-        logger.debug(f"Movement distance: {np.linalg.norm(movement)}, tolerance: {random_90degDistance_threshold}")
-
-        if orthogonal_distance < (obj.min_dist / 2):
-            logger.debug(f"Supervisor said: Object is in line between TCP and Area and therefore move to object.")
-
-            # Randomize the movement to the object based on the distance between the object and the area
-            rel_action[1] = movement[1] * random.uniform((0.2 + abs(obj_area_distance)), (1.0 + abs(obj_area_distance)))
-            rel_action[0] = movement[0] * random.uniform((0.2 + abs(obj_area_distance)), (1.0 + abs(obj_area_distance)))
-
-        elif np.linalg.norm(movement) < random_90degDistance_threshold:
-            # If the object is not in line between TCP and Area, move to the side of the object
-            # If movement is too small, take an action weighted to the side of the object  
-
-            logger.debug(f"Supervisor said: TCP close to the object, doing a mvt. 90° CCW")
-            movement = np.array([movement[1], -movement[0]])
-
-            # Randomize the movement to the side of the object
-            rel_action[1] = movement[1] * random.uniform(1, 1.2)
-            rel_action[0] = movement[0] * random.uniform(1, 1.2)
-        
-        else:
-            # Randomize the movement to the object and make it smaller so the supervisor does not push the object of the table
-            logger.debug(f"Supervisor said: Move to the object.")
-
-            # Randomize the movement to the object
-            rel_action[1] = movement[1] * random.uniform(0.7, 0.9)
-            rel_action[0] = movement[0] * random.uniform(0.7, 0.9)
-
-        # ----------------- Absolute Movement -----------------
-
-        # Convert relative movement to absolute movement
-        abs_action = tcp_pos + rel_action
-
-        # Define the range of the movement space
-        x_range = self.env.movement_bounds[0][1] - self.env.movement_bounds[0][0]
-        y_range = self.env.movement_bounds[1][1] - self.env.movement_bounds[1][0]
-
-        # Normalize action in movement boundaries
-        action[0] = (abs_action[0] - self.env.movement_bounds[0][0]) / x_range
-        action[1] = (abs_action[1] - self.env.movement_bounds[1][0]) / y_range
-
-        action = 2 * action - 1 # to convert from [0,1] to [-1,1]
-
-        # Clip action between [-1 1], needed for objects that are pushed off the table and now lie outside of workspace in the void
-        action = np.clip(action, -1, 1)
-
-        logger.debug(f"Supervisor said: Action {action} for object pose: {obj_pos}")
-
-        return action
-    
-    def orthogonal_distance(self, obj_pos, area_pos, tcp_pos):
-        """
-        Calculates the orthogonal distance between a line and a point.
-
-        :param obj_pos: List [x, y] of the object's position
-        :param area_pos: List [x, y] of the area's position
-        :param tcp_pos: List [x, y] of the TCP's position
-        :return: Orthogonal distance
-        """
-        # Convert to numpy arrays for easier calculations
-        obj = np.array(obj_pos)
-        area = np.array(area_pos)
-        tcp = np.array(tcp_pos)
-
-        # Direction vector of the line
-        line_vec = area - tcp
-
-        # Vector from TCP to the object
-        point_vec = obj - tcp
-
-        # Calculate distance between the object and the area
-        obj_area_distance = np.linalg.norm(obj - area)
-
-        # Calculate distance between the TCP and the area
-        tcp_area_distance = np.linalg.norm(tcp - area)
-
-        # If the TCP is closer to the area than the object, return infinity
-        # Object is behind the TCP relative to the area
-        # Object is next to the TCP relative to the area
-        if tcp_area_distance < obj_area_distance or abs(obj_area_distance - tcp_area_distance) < 0.01:
-            return float("inf")
-
-        # Orthogonal distance (cross product of the direction vector with the point vector, normalized by the length of the direction vector)
-        distance = np.linalg.norm(np.cross(line_vec, point_vec)) / np.linalg.norm(line_vec)
-
-        return float(distance)
-
-
 class DQNAgent:
     def __init__(
         self,
@@ -287,7 +124,6 @@ class DQNAgent:
         epsilon=0.8,
         epsilon_min=0.1,
         epsilon_decay=0.99995,
-        supervisor_epsilon=0.0,
         gamma=0.99,
         input_shape=(88, 88, 6),
         weights_path="",
@@ -301,13 +137,11 @@ class DQNAgent:
         self.epsilon_min = epsilon_min
 
         self.epsilon_decay = epsilon_decay
-        self.supervisor_epsilon = supervisor_epsilon
         self.gamma = gamma
         self.input_shape = input_shape
         self.use_pretrained_best_model = use_pretrained_best_model
         self.auto_set_epsilon = auto_set_epsilon
         self.agent_actions = []  # Store only agent actions for plotting
-        self.supervisor_actions = []  # Store only supervisor actions for plotting
 
         # Set start episode to 0 if no weights are loaded
         self.start_episode = 0
@@ -353,27 +187,19 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)  # Use the learning_rate parameter
 
-    def get_action(self, state, supervisor, training=True):
+    def get_action(self, state, training=True):
         # Explanation of the epsilon-greedy strategy:
-        # With probability epsilon, take a random action (exploration) or ask the supervisor for an action
+        # With probability epsilon, take a random action (exploration) 
         # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
 
         if training and np.random.random() < self.epsilon:
-
-            if np.random.random() < self.supervisor_epsilon:
-                # Ask supervisor for action
-                logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
-                action = supervisor.ask_supervisor()
-                self.supervisor_actions.append(action)  # Store supervisor actions for plotting
-            else:
-                logger.info(f"Random action taken with {self.epsilon:.2f} and supervisor epsilon {self.supervisor_epsilon:.2f}")
-                action = np.random.uniform(-1, 1, self.action_dim)
-                self.supervisor_actions.append(action)
-
+            logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
+            action = np.random.uniform(-1, 1, self.action_dim)
+            self.agent_actions.append(action)
             return action
         
         else:
-            logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+            logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
             state = np.expand_dims(state, axis=0)
 
             # Direct continuous output from network
@@ -386,8 +212,6 @@ class DQNAgent:
         # Purge oldest actions if the length exceeds 10500
         if len(self.agent_actions) > 10500:
             self.agent_actions = self.agent_actions[-10500:]
-        if len(self.supervisor_actions) > 10500:
-            self.supervisor_actions = self.supervisor_actions[-10500:]
 
         return action
 
@@ -483,28 +307,23 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
         
 
-def plot_actionHistory(agent_actions, supervisor_actions, plot_dir, episode):
-    """Plot agent and supervisor actions with fading colors and save the plot."""
+def plot_actionHistory(agent_actions, plot_dir, episode):
+    """Plot agent actions with fading colors and save the plot."""
     fig, ax = plt.subplots()
     num_agent_actions = len(agent_actions)
-    num_supervisor_actions = len(supervisor_actions)
     agent_colors = plt.cm.Blues(np.linspace(0.3, 1, num_agent_actions))
-    supervisor_colors = plt.cm.Greens(np.linspace(0.3, 1, num_supervisor_actions))
 
     for i, action in enumerate(agent_actions):
         ax.scatter(action[0], action[1], color=agent_colors[i], s=10, label="Agent Action" if i == 0 else "")
 
-    for i, action in enumerate(supervisor_actions):
-        ax.scatter(action[0], action[1], color=supervisor_colors[i], s=10, label="Supervisor Action" if i == 0 else "")
-
     ax.set_xlabel("Action X")
     ax.set_ylabel("Action Y")
-    ax.set_title("Agent (blue) and Supervisor (green) Actions Over Time")
+    ax.set_title("Agent Actions Over Time")
     ax.legend()
 
     # Save the plot image
     plt.tight_layout()
-    plt.savefig(f"{plot_dir}/agent_supervisor_actions_{episode}.png")
+    plt.savefig(f"{plot_dir}/agent_actions_{episode}.png")
     plt.close()
 
 
@@ -600,12 +419,6 @@ def main(cfg: DictConfig) -> None:
     # Initialize DQN agent with 2D continuous action space
     action_dim = 2  # (x,y) continuous actions
     input_shape = (88, 88, 6)  # RGB (3) + 3 * depth (1) = 6  channels
-    supervisor = DQNSupervisor(
-        action_dim,
-        env,
-        workspace_bounds=cfg.workspace_bounds,
-        sv_90deg_movement_threshold=cfg.supervisor.sv_90deg_movement_threshold
-    )
     agent = DQNAgent(
         action_dim,
         input_shape=input_shape,
@@ -615,7 +428,7 @@ def main(cfg: DictConfig) -> None:
         use_pretrained_best_model=cfg.use_pretrained_best_model,  # Pass the use_pretrained_best_model from the config
         auto_set_epsilon=cfg.auto_set_epsilon,  # Pass the auto_set_epsilon from the config
     )
-    logger.info("DQN supervisor and DQN agent initialized.")
+    logger.info("DQN agent initialized.")
     replay_buffer = PrioritizedReplayBuffer()
     logger.info("Replay buffer initialized.")
 
@@ -636,7 +449,7 @@ def main(cfg: DictConfig) -> None:
         logger.debug(f"Starting episode {episode} with max steps {max_steps}.")
 
         for step in range(max_steps):
-            action = agent.get_action(state, supervisor)
+            action = agent.get_action(state)
 
             # Get next state using environment's step function
             next_state, reward, done, _, failed = env.step(action)
@@ -672,7 +485,7 @@ def main(cfg: DictConfig) -> None:
         # Plot rewards and epsilon in the same graph and save in to file periodically
         if episode % cfg.plot_freq == 0 and episode > 0:
             plot_rewards_epsilons(rewards, epsilons, episode, cfg.plot_dir)
-            #plot_actionHistory(agent.agent_actions, agent.supervisor_actions, cfg.plot_dir, episode)  # Plot agent and supervisor actions
+            #plot_actionHistory(agent.agent_actions, cfg.plot_dir, episode)  # Plot agent actions
 
         # Save model periodically
         if episode % cfg.save_freq == 0 and episode > 0:
