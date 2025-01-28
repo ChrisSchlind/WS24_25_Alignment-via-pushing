@@ -194,7 +194,8 @@ class DQNAgent:
 
         if training and np.random.random() < self.epsilon:
             logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
-            action = np.random.choice([0, 1, 2, 3])
+            action = np.zeros(self.action_dim)
+            action[np.random.choice(self.action_dim)] = 1
             self.agent_actions.append(action)
             return action
         
@@ -376,7 +377,7 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"No movement punishment Reward: {cfg.activate_no_movement_punishment}")
 
     # Initialize DQN agent with 2D continuous action space
-    action_dim = 2  # (x,y) continuous actions
+    action_dim = 4  # (x,y) continuous actions
     input_shape = (88, 88, 6)  # RGB (3) + 3 * depth (1) = 6  channels
     agent = DQNAgent(
         action_dim,
