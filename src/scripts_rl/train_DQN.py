@@ -194,7 +194,7 @@ class DQNAgent:
 
         if training and np.random.random() < self.epsilon:
             logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
-            action = np.random.uniform(-1, 1, self.action_dim)
+            action = np.random.choice([0, 1, 2, 3])
             self.agent_actions.append(action)
             return action
         
@@ -216,7 +216,7 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
+    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
@@ -225,67 +225,26 @@ class DQNAgent:
         # Sample a batch from the replay buffer
         states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
 
-        # Predict heatmaps for the next states using the target model
-        target_heatmaps = self.target_model(next_states).numpy()  # (batch_size, H, W, 1)
+        # Predict Q-values for the next states using the target model
+        next_q_values = self.target_model(next_states).numpy()  # (batch_size, action_dim)
 
-        # Initialize the list to store the maximum Q-values from the local neighborhood
-        next_values = []
-        pixel_x_list = []
-        pixel_y_list = []
-
-        # Iterate through each heatmap to calculate the maximum Q-value within a local neighborhood of the current action
-        # This ignores artefacts and focuses on the most relevant part of the heatmap
-        # This explicit method to calculate the maximum Q-value only works because the heatmaps represents to total action space (of the robot, camera bounds and movement bounds need to match)
-        for i, heatmap in enumerate(target_heatmaps):
-            # Normalize the heatmap
-            heatmap_normalized = (heatmap - np.mean(heatmap)) / (np.std(heatmap) + 1e-8)
-
-            # Smooth the heatmap to reduce noise
-            heatmap_smoothed = scipy.ndimage.gaussian_filter(heatmap_normalized, sigma=1)
-
-            # Convert action to pixel coordinates
-            action_x, action_y = actions[i]
-            height, width = heatmap_smoothed.shape[:2]
-            pixel_x = int((action_x + 1) * (width - 1) / 2)
-            pixel_y = int((action_y + 1) * (height - 1) / 2)
-            
-            # Append pixel coordinates to the lists
-            pixel_x_list.append(pixel_x)
-            pixel_y_list.append(pixel_y)
-
-            # Define the local window around the action's pixel
-            x_min = max(0, pixel_x - window_size // 2)
-            x_max = min(width, pixel_x + window_size // 2 + 1)
-            y_min = max(0, pixel_y - window_size // 2)
-            y_max = min(height, pixel_y + window_size // 2 + 1)
-
-            # Extract the local neighborhood
-            local_heatmap = heatmap_smoothed[y_min:y_max, x_min:x_max]
-
-            # Find the minium value in the local neighborhood
-            min_index_local = np.unravel_index(np.argmin(local_heatmap), local_heatmap.shape)
-
-            # Map the local index back to global coordinates
-            global_index = (min_index_local[0] + y_min, min_index_local[1] + x_min)
-
-            # Append the maximum Q-value from the local neighborhood
-            next_values.append(heatmap_smoothed[global_index])
-
-        next_values = np.array(next_values).squeeze()  # Convert list to numpy array (batch_size,)
+        # Calculate the maximum Q-value for the next states
+        max_next_q_values = np.max(next_q_values, axis=1)
 
         # Calculate target Q-values
-        target_values = rewards + (1 - dones) * next_values * self.gamma
+        target_q_values = rewards + (1 - dones) * max_next_q_values * self.gamma
 
         # Train the model
         with tf.GradientTape() as tape:
             # Predict Q-values for the current states
-            values = self.model(states)
-            
+            q_values = self.model(states)
+
             # Gather Q-values for the executed actions
-            values = tf.gather_nd(values, tf.stack([np.arange(len(values)), pixel_y_list, pixel_x_list], axis=1))
+            action_indices = np.array(actions, dtype=np.int32)
+            q_values = tf.gather(q_values, action_indices, batch_dims=1)
 
             # Compute the loss
-            loss = tf.keras.losses.MSE(target_values, values)
+            loss = tf.keras.losses.MSE(target_q_values, q_values)
             weighted_loss = weights * loss
 
             logger.debug(f"Weighted Loss: {weighted_loss.numpy()}")
