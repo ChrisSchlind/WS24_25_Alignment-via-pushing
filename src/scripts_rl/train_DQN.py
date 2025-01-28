@@ -57,13 +57,6 @@ class ConvDQN(tf.keras.Model):
         x = self.output_layer(x)
         logger.debug(f"Output of the network: {x}")
 
-        # Convert vector to index of the maximum value
-        x = tf.argmax(x, axis=-1)
-        logger.debug(f"Output of the network after argmax: {x}")
-
-        # Squeeze the output to remove the batch dimension
-        x = tf.squeeze(x)
-
         return x  # Output is the index of the maximum value in the output vector
 
 class PrioritizedReplayBuffer:
@@ -190,7 +183,6 @@ class DQNAgent:
     def get_action(self, state, training=True):
         # Explanation of the epsilon-greedy strategy:
         # With probability epsilon, take a random action (exploration) 
-        # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
 
         if training and np.random.random() < self.epsilon:
             logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
@@ -225,26 +217,23 @@ class DQNAgent:
         # Sample a batch from the replay buffer
         states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
 
-        # Predict Q-values for the next states using the target model
-        next_q_values = self.target_model(next_states).numpy()  # (batch_size, action_dim)
+        # Compute the target Q-values
+        targets = self.target_model(states).numpy()
 
-        # Calculate the maximum Q-value for the next states
-        max_next_q_values = np.max(next_q_values, axis=1)
+        # Compute the next Q-values using the target model
+        next_value = self.target_model(next_states).numpy().max(axis=1)
 
-        # Calculate target Q-values
-        target_q_values = rewards + (1 - dones) * max_next_q_values * self.gamma
+        # new approximation of the action value; the '1-dones' means, that if the game
+        targets[range(actions.shape[0]), actions] = rewards + (1 - dones) * next_value * self.gamma
 
         # Train the model
         with tf.GradientTape() as tape:
-            # Predict Q-values for the current states
-            q_values = self.model(states)
-
-            # Gather Q-values for the executed actions
-            action_indices = np.array(actions, dtype=np.int32)
-            q_values = tf.gather(q_values, action_indices, batch_dims=1)
+            # Predict values for the current states
+            values = self.model(states)
 
             # Compute the loss
-            loss = tf.keras.losses.MSE(target_q_values, q_values)
+            loss = tf.keras.losses.MSE(targets, values)
+            logger.debug(f"Loss: {loss.numpy()}")
             weighted_loss = weights * loss
 
             logger.debug(f"Weighted Loss: {weighted_loss.numpy()}")

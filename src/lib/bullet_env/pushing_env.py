@@ -153,6 +153,9 @@ class PushingEnv(BulletEnv):
             new_pose = Affine([x_move, y_move, 0])
 
         else:
+            # Determine index of maximum value in action array
+            action = np.argmax(action)
+
             # Convert discrete action to continuous action space
             if action == 0:  # left
                 action_space = [0, -1]
