@@ -113,7 +113,7 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0.5,
+        epsilon=0.8,
         epsilon_min=0.1,
         epsilon_decay=0.99995,
         gamma=0.99,
@@ -208,7 +208,7 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=16, beta=0.4):
+    def train(self, replay_buffer, batch_size=32, train_start_size=2000, beta=0.4):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
@@ -233,8 +233,8 @@ class DQNAgent:
 
             # Compute the loss
             loss = tf.keras.losses.MSE(targets, values)
+            logger.debug(f"Loss: {loss.numpy()}")
             weighted_loss = weights * loss
-
             logger.debug(f"Weighted Loss: {weighted_loss.numpy()}")
 
         # Compute gradients and apply updates
@@ -311,6 +311,41 @@ def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
     np.savetxt(f"{plot_dir}/dqn_rewards_epsilons_{episode}.csv", data, delimiter=",", header="Reward,Epsilon", comments="")
 
 
+def plot_losses_epsilons(losses, epsilons, episode, plot_dir):
+    # Create the figure and the first y-axis
+    fig, ax1 = plt.subplots()
+
+    # Plot the losses on the first y-axis
+    ax1.plot(losses, label="Loss", color="tab:blue")
+    ax1.set_xlabel("Episode")
+    ax1.set_ylabel("Loss", color="tab:blue")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+
+    # Create the second y-axis that shares the same x-axis
+    ax2 = ax1.twinx()
+
+    # Plot the epsilons on the second y-axis
+    ax2.plot(epsilons, label="Epsilon", color="tab:orange")
+    ax2.set_ylabel("Epsilon", color="tab:orange")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+
+    # Add the legend
+    ax1.legend(loc="upper left")
+    ax2.legend(loc="upper right")
+
+    # test if plot_dir exists, if not create it
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+
+    # Save the plot image
+    plt.tight_layout()  # Avoid cutting off labels
+    plt.savefig(f"{plot_dir}/dqn_losses_epsilons_{episode}.png")
+    plt.close()
+
+    # Save the losses and epsilons to a CSV file
+    data = np.column_stack((losses, epsilons))
+    np.savetxt(f"{plot_dir}/dqn_losses_epsilons_{episode}.csv", data, delimiter=",", header="Losses,Epsilon", comments="")
+
 @hydra.main(version_base=None, config_path="config", config_name="DQN")
 def main(cfg: DictConfig) -> None:
     logger.remove()
@@ -383,6 +418,7 @@ def main(cfg: DictConfig) -> None:
     # Initialize reward tracking
     rewards = []
     epsilons = []
+    losses = []
 
     # Training loop
     for episode in range(cfg.num_episodes):
@@ -406,6 +442,8 @@ def main(cfg: DictConfig) -> None:
 
             if replay_buffer.size() >= cfg.batch_size:
                 loss = agent.train(replay_buffer, cfg.batch_size)
+                if loss is not None:
+                    losses.append(np.mean(loss))
 
             if step % cfg.target_update_freq == 0:
                 agent.update_target()
@@ -434,6 +472,7 @@ def main(cfg: DictConfig) -> None:
         if episode % cfg.plot_freq == 0 and episode > 0:
             plot_rewards_epsilons(rewards, epsilons, episode, cfg.plot_dir)
             #plot_actionHistory(agent.agent_actions, cfg.plot_dir, episode)  # Plot agent actions
+            plot_losses_epsilons(losses, epsilons, episode, cfg.plot_dir)
 
         # Save model periodically
         if episode % cfg.save_freq == 0 and episode > 0:
