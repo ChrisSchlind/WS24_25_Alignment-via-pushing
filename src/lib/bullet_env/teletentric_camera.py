@@ -75,14 +75,7 @@ class TeletentricCamera(BulletCamera):
         color[:, :left_lim] = 0
         color[:, self.resolution[0] - right_lim :] = 0
         color[:top_lim, :] = 0
-        color[self.resolution[1] - bottom_lim :, :] = 0
-
-        # Draw the TCP cylinder position in the RGB and depth image, if it is within the image bounds
-        if 0 <= eef_position_pixel[0] < self.resolution[0] and 0 <= eef_position_pixel[1] < self.resolution[1]:
-            # add to RGB image
-            color = cv2.circle(color, tuple(eef_position_pixel), radius=8, color=(255, 255, 255), thickness=-1)
-            # add to depth image
-            depth = cv2.circle(depth, tuple(eef_position_pixel), radius=8, color=(0.11), thickness=-1)
+        color[self.resolution[1] - bottom_lim :, :] = 0   
 
         # normalize depth values
         depth = depth / depth.max()
@@ -96,7 +89,7 @@ class TeletentricCamera(BulletCamera):
         if self.record_depth:
             observation["depth"] = depth
 
-        return observation
+        return observation, eef_position_pixel
 
     def world_to_pixel_2d(self, world_point, transformation_matrix):
 

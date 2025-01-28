@@ -401,7 +401,7 @@ def main(cfg: DictConfig) -> None:
 
     # Initialize DQN agent with 2D continuous action space
     action_dim = 4  # (left, right, up, down), discrete actions
-    input_shape = (84, 84, 6)  # RGB (3) + 3 * depth (1) = 6  channels
+    input_shape = (84, 84, 7)  # RGB (3) + 3 * depth (1)  + TCP one-hot-encoded (1) = 7  channels
     agent = DQNAgent(
         action_dim,
         input_shape=input_shape,
@@ -432,6 +432,9 @@ def main(cfg: DictConfig) -> None:
             max_steps = min(cfg.max_steps_per_episode, (episode + 1) * 10)
         logger.debug(f"Starting episode {episode} with max steps {max_steps}.")
 
+        # Clear step losses for the episode        
+        step_losses = []
+
         for step in range(max_steps):
             action = agent.get_action(state)
 
@@ -442,8 +445,12 @@ def main(cfg: DictConfig) -> None:
 
             if replay_buffer.size() >= cfg.batch_size:
                 loss = agent.train(replay_buffer, cfg.batch_size)
-                if loss is not None:
-                    losses.append(np.mean(loss))
+                if loss is None:
+                    loss = 0.0
+            else:
+                loss = 0.0
+
+            step_losses.append(np.mean(loss))
 
             if step % cfg.target_update_freq == 0:
                 agent.update_target()
@@ -467,7 +474,8 @@ def main(cfg: DictConfig) -> None:
         # Save rewards and epsilon for plotting
         rewards.append(episode_reward)
         epsilons.append(agent.epsilon)
-
+        losses.append(np.mean(step_losses))
+                     
         # Plot rewards and epsilon in the same graph and save in to file periodically
         if episode % cfg.plot_freq == 0 and episode > 0:
             plot_rewards_epsilons(rewards, epsilons, episode, cfg.plot_dir)

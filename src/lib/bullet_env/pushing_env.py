@@ -225,7 +225,7 @@ class PushingEnv(BulletEnv):
 
     def _get_observation(self):
         """Get RGB + depth observation from orthographic camera"""
-        obs = self.teletentric_camera.get_observation()
+        obs, tcp_position_pixel = self.teletentric_camera.get_observation()
 
         # Resize RGB image (500x500x3 -> 84x84x3)
         rgb = cv2.resize(obs["rgb"], (84, 84), interpolation=cv2.INTER_AREA)
@@ -244,8 +244,20 @@ class PushingEnv(BulletEnv):
         # Add channel dimension to depth
         depth = depth[..., np.newaxis]
 
+        # Create blank image for tcp position
+        tcp_image = np.zeros((84, 84, 1), dtype=np.float32)
+
+        # Calculate tcp pixel position for smaller image
+        if tcp_position_pixel is not None:
+            tcp_position_pixel[0] = min(int(tcp_position_pixel[0]/499 * 83), 83)
+            tcp_position_pixel[1] = min(int(tcp_position_pixel[1]/499 * 83), 83)
+
+        # One-hot encoding of TCP position
+        if tcp_position_pixel is not None:
+            tcp_image = cv2.circle(tcp_image, tuple(tcp_position_pixel), radius=0, color=(1), thickness=-1)
+
         # Concatenate RGB and depth into state
-        state = np.concatenate([rgb, depth, depth, depth], axis=-1)
+        state = np.concatenate([rgb, depth, depth, depth, tcp_image], axis=-1)
 
         # Ensure correct shape and type
         state = state.astype(np.float32)
