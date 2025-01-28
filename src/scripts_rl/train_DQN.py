@@ -194,7 +194,7 @@ class DQNAgent:
 
         if training and np.random.random() < self.epsilon:
             logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
-            action = np.random.choice([1, 2, 3, 4])
+            action = np.random.choice([0, 1, 2, 3])
             self.agent_actions.append(action)
             return action
         
