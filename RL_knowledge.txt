@@ -151,3 +151,10 @@ Muss noch bestätigt werden:
     Frage: Sind die Tiefenbilder richtig normiert, liegen diese im selben Bereich wie die RGB Bilder?
     Frage: Muss der Zylinder/das Werkzeug ebenfalls noch in das Tiefenbild geplottet werden für ein besseres Training?
     Frage: Lernt der Agent was von beiden von Bedeutung ist?
+
+
+--------------------------------------------------------------------------------------------------------
+#                                   Erkenntnisse aus dem letzten Test:
+--------------------------------------------------------------------------------------------------------
+
+- 2 Modelle (model und target_model) müssen geladen werden in die Grafikkarte, weswegen es schnell zu Problemen und Limitierungen in der Größe des Netzes kommen kann (3 Conv und 3 FC ist aktuelles Maximum)

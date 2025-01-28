@@ -17,50 +17,54 @@ from bullet_env.ur10_cell import UR10Cell  # Import UR10Cell
 from bullet_env.pushing_env import PushingEnv  # Add this import
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from transporter_network.resnet import ResNet
 import scipy.ndimage
 
 
 class ConvDQN(tf.keras.Model):
-    def __init__(self, initializer=tf.keras.initializers.GlorotUniform()):
+    def __init__(self, action_dim=4):
         super().__init__()
-        # Initializer for the weights
-        self.initializer = initializer
+        # Increased Conv-Layers to balance VRAM usage and performance
+        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=1, activation="relu")
+        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=1, activation="relu")
+        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=1, activation="relu")
 
-        # 4 Conv-Layers, each with 'same' padding to keep the output size the same as the input size
-        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
-        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
-        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
-        self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        # Flatten the output of the last convolutional layer
+        self.flatten = tf.keras.layers.Flatten()
 
-        # Attention Map (Sigmoid to normalize the values between 0 and 1)
-        # Test if this improves the differentiation between object and area with similar shapes and colors
-        self.attention_map = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="sigmoid", kernel_initializer=self.initializer)
+        # Increased Fully Connected Layers
+        self.fc1 = tf.keras.layers.Dense(256, activation="relu")
+        self.fc2 = tf.keras.layers.Dense(128, activation="relu")
+        self.fc3 = tf.keras.layers.Dense(64, activation="relu")
 
-        # Final Conv2D layer for the heatmap output (H, W, 1)
-        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation=None, kernel_initializer=self.initializer)
+        # Output layer for classification with action_dim classes and softmax activation
+        self.output_layer = tf.keras.layers.Dense(action_dim, activation="softmax")
 
     def call(self, x):
         # x: (batch_size, height, width, channels)
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = self.conv4(x)
 
-        # Generate attention map
-        attention = self.attention_map(x)
+        # Flatten the output of the last convolutional layer
+        x = self.flatten(x)
 
-        # Apply attention to the last convolutional layer's output
-        x = x * attention
+        # Fully connected layers
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
 
-        # Final heatmap
-        x = self.heatmap(x)
+        # Output layer for classification
+        x = self.output_layer(x)
+        logger.debug(f"Output of the network: {x}")
 
-        # Crop the heatmap to the desired size of 84x84
-        x = tf.keras.layers.Cropping2D(cropping=((2, 2), (2, 2)))(x)
+        # Convert vector to index of the maximum value
+        x = tf.argmax(x, axis=-1)
+        logger.debug(f"Output of the network after argmax: {x}")
 
-        # Return the heatmap (no activation because this is a continuous value map)
-        return x  # Heatmap of dimension (batch_size, 84, 84, 1)
+        # Squeeze the output to remove the batch dimension
+        x = tf.squeeze(x)
+
+        return x  # Output is the index of the maximum value in the output vector
 
 class PrioritizedReplayBuffer:
     def __init__(self, capacity=50000, alpha=0.6):
@@ -314,10 +318,12 @@ class DQNAgent:
         # Build models with dummy input
         dummy_state = np.zeros((1,) + self.input_shape)
         self.model(dummy_state)  # Initialize with correct shape
+        logger.debug(f"Model initialized with input shape: {self.input_shape}")
 
         # Create and initialize target model
         self.target_model = ConvDQN()
         self.target_model(dummy_state)  # Initialize with correct shape
+        logger.debug("Target model initialized")
 
         if self.use_pretrained_best_model and weights_path:
             try:
@@ -475,71 +481,7 @@ class DQNAgent:
 
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
-
-    def _choose_action_from_min_area(self, heatmap, window_size=3):
-        # Squeeze the batch and channel dimensions
-        heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
-
-        # Find the position with the minimum value in the heatmap
-        min_index = np.unravel_index(np.argmin(heatmap), heatmap.shape)
-
-        # Extract the window around the minimum value
-        i_min = max(min_index[0] - window_size // 2, 0)
-        i_max = min(min_index[0] + window_size // 2 + 1, heatmap.shape[0])
-        j_min = max(min_index[1] - window_size // 2, 0)
-        j_max = min(min_index[1] + window_size // 2 + 1, heatmap.shape[1])
-
-        # Extract the local area around the minimum value
-        local_area = heatmap[i_min:i_max, j_min:j_max]
-
-        # Find the minimum value in the local area
-        local_min_index = np.unravel_index(np.argmin(local_area), local_area.shape)
-
-        # Calculate the global index of the maximum value
-        global_index = (local_min_index[0] + i_min, local_min_index[1] + j_min)        
-
-        # Normalize the (i, j) position to the range [-1, 1]
-        height, width = heatmap.shape
-        normalized_x = 2 * global_index[0] / (height - 1) - 1
-        normalized_y = 2 * global_index[1] / (width - 1) - 1
-
-        # DEBUG: Convert heatmap to rgb, resize it to 500x500, make max value 255 and min value 0 and display it with opencv
-        # Normalize the heatmap to the range [0, 1]
-        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap) + 1e-8)
-
-        # Resize heatmap to 500x500
-        heatmap_resized = cv2.resize(heatmap, (500, 500), interpolation=cv2.INTER_NEAREST)
-
-        # Copy heatmap
-        copy_heatmap = copy.deepcopy(heatmap_resized)
-
-        # Change
-        copy_heatmap[global_index[0],global_index[1]] = 1
-
-        # Display the heatmap with OpenCV
-        cv2.imshow("Original Grayscale Heatmap", copy_heatmap)
-        cv2.waitKey(1)
-
-        # Convert heatmap to RGB
-        heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
-
-        # Get max value of heatmap and min value of heatmap
-        max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
-        min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
-
-        # Make pixel at max_value black and pixel at min_value white
-        heatmap_rgb[max_pos[0], max_pos[1], :] = [0, 0, 0]  # black
-        heatmap_rgb[min_pos[0], min_pos[1], :] = [255, 255, 255]  # white
-
-        # Resize heatmap to 500x500
-        heatmap_rgb_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
-
-        # Display the heatmap with OpenCV
-        cv2.imshow("Spectrum Heatmap", heatmap_rgb_resized)
-        cv2.waitKey(1)        
-
-        return np.array([normalized_x, normalized_y]), global_index
-
+        
 
 def plot_actionHistory(agent_actions, supervisor_actions, plot_dir, episode):
     """Plot agent and supervisor actions with fading colors and save the plot."""

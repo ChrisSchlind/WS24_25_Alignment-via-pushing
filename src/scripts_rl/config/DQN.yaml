@@ -64,12 +64,12 @@ batch_size: 16
 target_update_freq: 100
 save_freq: 10
 learning_rate: 0.00005          # old value: 0.00025, trying a lower value now as the net seems to adpat too fast and be stuck at -1,-1
-use_pretrained_best_model: True
+use_pretrained_best_model: False
 auto_set_epsilon: False
 
 # Load pretrained model
 weights_dir: "models/best"
-weights_path: "dqn_episode_2080_luis" # example: "dqn_episode_1000"
+weights_path: "" # example: "dqn_episode_1000"
 
 # Model parameters
 model_dir: "models/dqn"
@@ -80,7 +80,7 @@ plot_freq: 10
 plot_dir: "models/plot"
 
 # Parameters to determine if task is done
-success_threshold_trans: 0.01
+success_threshold_trans: 0.03
 success_threshold_rot: 22.5
 
 # Testing parameters
