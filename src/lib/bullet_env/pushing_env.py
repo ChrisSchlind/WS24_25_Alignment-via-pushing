@@ -315,16 +315,17 @@ class PushingEnv(BulletEnv):
             # ******************************************************************
             # Calculate IoU-based reward (if IoU gets higher, reward is positive, scaled by self.iou_reward_scale)
             if self.activate_iou_reward:  # Reward only when it's activated
-                IOU = self.get_objects_intersection_volume(obj.unique_id, area.unique_id)
+                IOU = self.get_objects_intersection_volume(obj.unique_id, area.unique_id) * 1e9
+                IOU = round(IOU, 2)
                 iou_delta = IOU - self.old_iou[i]
                 if self.current_step != 1:  # Skip the first step since old_iou is initially 0
                     if iou_delta > 0:  # IOU got better -> positive reward
-                        current_reward = iou_delta * 1e6 * self.iou_reward_scale
+                        current_reward = iou_delta * self.iou_reward_scale
                         total_reward += round(current_reward, 2)
                         self.moves_without_positive_reward = 0
                         positive_reward_flag = True
                         logger.info(f"IOU improvement reward for object {i}: {round(current_reward, 2)}")
-                    elif iou_delta < 0:  # IOU got worse -> currently no punishment
+                    else: # IOU got worse -> currently no punishment
                         # current_reward = iou_delta * 1e6 * self.iou_reward_scale * 0.1      # in this case iou_delta is negative, so the reward is negative and therefore the agent is punsihed
                         current_reward = 0.0  # currently no punishment for decreasing IoU
                         total_reward += round(current_reward, 2)
