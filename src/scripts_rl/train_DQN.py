@@ -24,9 +24,9 @@ class ConvDQN(tf.keras.Model):
     def __init__(self, action_dim=4):
         super().__init__()
         # Increased Conv-Layers to balance VRAM usage and performance
-        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=1, activation="relu")
-        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=1, activation="relu")
-        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=1, activation="relu")
+        self.conv1 = tf.keras.layers.Conv2D(16, 3, strides=1, activation="relu")
+        self.conv2 = tf.keras.layers.Conv2D(32, 3, strides=1, activation="relu")
+        self.conv3 = tf.keras.layers.Conv2D(64, 3, strides=1, activation="relu")
 
         # Flatten the output of the last convolutional layer
         self.flatten = tf.keras.layers.Flatten()
@@ -55,7 +55,6 @@ class ConvDQN(tf.keras.Model):
 
         # Output layer for classification
         x = self.output_layer(x)
-        logger.debug(f"Output of the network: {x}")
 
         return x  # Output is the index of the maximum value in the output vector
 
@@ -114,7 +113,7 @@ class DQNAgent:
     def __init__(
         self,
         action_dim,
-        epsilon=0.8,
+        epsilon=0.5,
         epsilon_min=0.1,
         epsilon_decay=0.99995,
         gamma=0.99,
@@ -198,7 +197,7 @@ class DQNAgent:
             state = np.expand_dims(state, axis=0)
 
             # Direct continuous output from network
-            action = self.model(state)
+            action = self.model(state)[0].numpy()
             logger.debug(f"Action for Agent: {action}")
 
             self.agent_actions.append(action)  # Store agent actions for plotting
@@ -209,7 +208,7 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4):
+    def train(self, replay_buffer, batch_size=32, train_start_size=16, beta=0.4):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
@@ -225,7 +224,7 @@ class DQNAgent:
         next_value = self.target_model(next_states).numpy().max(axis=1)
 
         # new approximation of the action value; the '1-dones' means, that if the game
-        targets[range(actions.shape[0]), actions] = rewards + (1 - dones) * next_value * self.gamma
+        targets[range(actions.shape[0]), np.argmax(actions, axis=1)] = rewards + (1 - dones) * next_value * self.gamma
 
         # Train the model
         with tf.GradientTape() as tape:
@@ -234,7 +233,6 @@ class DQNAgent:
 
             # Compute the loss
             loss = tf.keras.losses.MSE(targets, values)
-            logger.debug(f"Loss: {loss.numpy()}")
             weighted_loss = weights * loss
 
             logger.debug(f"Weighted Loss: {weighted_loss.numpy()}")

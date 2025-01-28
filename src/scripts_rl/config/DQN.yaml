@@ -36,7 +36,7 @@ movement_bounds:
 
 
 # Step size relative to the workspace bounds
-step_size: 0.01 # 1% of the workspace bounds per step
+step_size: 0.1 # 1% of the workspace bounds per step
 
 # Movement condition
 absolut_movement: False

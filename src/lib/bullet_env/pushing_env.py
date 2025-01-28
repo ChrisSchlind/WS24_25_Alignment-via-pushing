@@ -157,13 +157,13 @@ class PushingEnv(BulletEnv):
             action = np.argmax(action)
 
             # Convert discrete action to continuous action space
-            if action == 0:  # left
+            if action == 0:
                 action_space = [0, -1]
-            elif action == 1:  # right
+            elif action == 1:
                 action_space = [0, 1]
-            elif action == 2:  # up
+            elif action == 2:
                 action_space = [-1, 0]
-            elif action == 3:  # down
+            elif action == 3:
                 action_space = [1, 0]
             else:
                 raise ValueError("Invalid action value")
@@ -190,7 +190,7 @@ class PushingEnv(BulletEnv):
             ):
                 logger.debug("New pose is within movement bounds.")
             else:
-                logger.debug("New pose is outside movement bounds.")
+                logger.info("New pose is outside movement bounds.")
                 new_pose = current_pose  # Keep the current pose if the new pose is outside bounds
                 self.movement_punishment = True
 
