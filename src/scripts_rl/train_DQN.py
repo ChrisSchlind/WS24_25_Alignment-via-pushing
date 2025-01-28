@@ -481,13 +481,13 @@ class DQNAgent:
         heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
 
         # Find the position with the minimum value in the heatmap
-        max_index = np.unravel_index(np.argmin(heatmap), heatmap.shape)
+        min_index = np.unravel_index(np.argmin(heatmap), heatmap.shape)
 
         # Extract the window around the minimum value
-        i_min = max(max_index[0] - window_size // 2, 0)
-        i_max = min(max_index[0] + window_size // 2 + 1, heatmap.shape[0])
-        j_min = max(max_index[1] - window_size // 2, 0)
-        j_max = min(max_index[1] + window_size // 2 + 1, heatmap.shape[1])
+        i_min = max(min_index[0] - window_size // 2, 0)
+        i_max = min(min_index[0] + window_size // 2 + 1, heatmap.shape[0])
+        j_min = max(min_index[1] - window_size // 2, 0)
+        j_max = min(min_index[1] + window_size // 2 + 1, heatmap.shape[1])
 
         # Extract the local area around the minimum value
         local_area = heatmap[i_min:i_max, j_min:j_max]
