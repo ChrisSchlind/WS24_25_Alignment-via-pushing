@@ -125,7 +125,7 @@ class DQNAgent:
         epsilon_min=0.1,
         epsilon_decay=0.99995,
         gamma=0.99,
-        input_shape=(88, 88, 6),
+        input_shape=(84, 84, 6),
         weights_path="",
         weights_dir="models/best",
         learning_rate=0.00025,  # Add learning_rate parameter
@@ -200,13 +200,14 @@ class DQNAgent:
         
         else:
             logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
+
+            # Add batch dimension to the state
             state = np.expand_dims(state, axis=0)
 
             # Direct continuous output from network
-            heatmap = self.model(state)[0].numpy()  
+            action = self.model(state)
+            logger.debug(f"Action for Agent: {action}")
 
-            action, pixels = self._choose_action_from_min_area(heatmap) # output is vector [x, y] with values between -1 and 1
-            logger.debug(f"Action for Agent: {action} and pixels: {pixels}")
             self.agent_actions.append(action)  # Store agent actions for plotting
 
         # Purge oldest actions if the length exceeds 10500
@@ -417,8 +418,8 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"No movement punishment Reward: {cfg.activate_no_movement_punishment}")
 
     # Initialize DQN agent with 2D continuous action space
-    action_dim = 2  # (x,y) continuous actions
-    input_shape = (88, 88, 6)  # RGB (3) + 3 * depth (1) = 6  channels
+    action_dim = 4  # (left, right, up, down), discrete actions
+    input_shape = (84, 84, 6)  # RGB (3) + 3 * depth (1) = 6  channels
     agent = DQNAgent(
         action_dim,
         input_shape=input_shape,

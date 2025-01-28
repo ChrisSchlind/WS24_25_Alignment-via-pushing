@@ -35,11 +35,11 @@ movement_bounds:
   - [-0.5, 0.5]  # z bounds
 
 
-# Step size relative to the workspace bounds, old value: 0.4, now it is 1 and i like better
-step_size: 1
+# Step size relative to the workspace bounds
+step_size: 0.01 # 1% of the workspace bounds per step
 
 # Movement condition
-absolut_movement: True
+absolut_movement: False
 
 # Reward
 # Idea: Only activate one reward at a time, to see the effect of each reward
@@ -89,7 +89,7 @@ render_delay: 50  # milliseconds between frames
 
 # Camera settings
 camera:
-  image_size: [88, 88]  # Standard size for DQN input
+  image_size: [84, 84]  # Standard size for DQN input
   orthographic: true
 
 # Supervisor settings
