@@ -208,7 +208,7 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=2000, beta=0.4):
+    def train(self, replay_buffer, batch_size=32, train_start_size=4000, beta=0.4):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
