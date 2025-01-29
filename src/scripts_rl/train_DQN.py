@@ -249,7 +249,7 @@ class DQNAgent:
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-        return weighted_loss.numpy()
+        return loss.numpy()
 
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
