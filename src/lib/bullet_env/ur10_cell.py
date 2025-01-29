@@ -120,7 +120,6 @@ class UR10Cell:
         return Affine(position, orientation)
 
     def schedule_sequence(self, sequence):
-        logger.debug(f"Scheduling sequence with {len(sequence)} steps")
 
         self.current_sequence = [self.solve_position_ik(pose) for pose in sequence]
         self.target_joint_positions = self.current_sequence.pop(0)
