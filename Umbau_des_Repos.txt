@@ -1,0 +1,44 @@
+Data/assets:
+- Alle objekte in den ordner "objects
+- "objects_warehouse" und "objects_NOT_WORKING" löschen
+- Aufrufen der gewünschten Objekte über liste in config file
+- Alle Objekte und areas größer machen (einheitliche größe und ein bisschen kleiner als die aktuell großen), min dist passend ändern
+    --> overlapping pose fixen, try-catch und dann halt anzahl objekte reduzieren, falls es nicht geht --> rauslöschen aus object_types liste!!!
+
+src/Lib:
+- Ordner "transporter_network" umbennen zu "reinforcement_learning" --> in den config files ändern
+- Dateien "data_generator.py" und "model.py" aus "transporter_network" löschen
+- Klassen aus train_DQN.py: ReplayBuffer, Agent und Supervisor in ein lib python file: lib/reinforcement_learning/DQN_util.py
+- Klassen aus train_DQN.py: ConvDQN aus den drei Iteration: ResNet, FCN V2, CNN V2 in ein lib python file: lib/reinforcement_learning/ConvDQN.py und dort halt Klassen richtig benennen
+    --> laden der Gewichte mit Zusatzfunktionen ausstatten, damit nur die passenden Gewichte für das jeweilige Netz geladen werden können sonst User Error message
+- Ordner "util" in lib erzeugen
+    --> alle _util.py dort hinverschieben --> passende config files erzeugen
+
+==> durchgehen ob einzelne Funktionen irgendwo rumfliegen
+
+Src/scripts_rl:
+- plot functions aus "train_DQN.py" in eigene util file --> "plot_util.py" und in lib verschieben
+- Ordner modells best passende Gewichte für alle drei Netze bereitstellen --> über Dateibenennung zuordnung machen?!
+
+- play_DQN.py betriebsbereit machen und passende config file erzeugen
+
+- config Ordner: Unterordner pro Ordner/Thema aus lib machen und dort config files verwalten
+- DQN.yaml aufsplitten in sinnvolle Unter-YAMLs. --> bspw. workspace_bounds in bullet_env.yaml schieben und damit auch bei play_game.yaml rausschmeißen
+- Config-Aufbau t.b.d
+
+
+
+- Logger Status konsitent machen über alle Funktione etc., sodass man über Flag in YAML Modus ändern kann:
+    INFO: Informationen z.B. Episoden-Nummer im Training --> wie YOLO Trainieren
+
+
+
+- UI für User während Training --> vgl. YOLO
+    
+
+Github:
+- Alle Branches löschen (lokal und auf github), die nicht mehr gebraucht werden --> die die gebraucht werden sinnvoll umbenennen
+- README.me schreiben und Funktion erklären
+- Umbau des Repos.txt löschen
+- ggf. Aufgabenstellung löschen und in kurzform ins readme
+- präsentation und gewichte cnn v2 per email schicken an gergely, hein etc. --> github link schicken (öffentlich machen)
