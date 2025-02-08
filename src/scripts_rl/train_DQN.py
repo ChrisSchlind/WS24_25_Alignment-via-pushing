@@ -1,23 +1,17 @@
 import sys
 import copy  # Add this import
 import hydra
-from loguru import logger
+import os
 import numpy as np
+from loguru import logger
 from omegaconf import DictConfig
 from hydra.utils import instantiate
-import tensorflow as tf
-import random
-from collections import deque
-import cv2
-import os
-from matplotlib import pyplot as plt
 from bullet_env.util import setup_bullet_client, stdout_redirected
 from transform.affine import Affine
 from bullet_env.ur10_cell import UR10Cell  # Import UR10Cell
 from bullet_env.pushing_env import PushingEnv  # Add this import
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import scipy.ndimage
+
+from .util.plot_util import plot_actionHistory, plot_rewards_epsilons, plot_losses_epsilons  # Add this import
        
 @hydra.main(version_base=None, config_path="config", config_name="DQN")
 def main(cfg: DictConfig) -> None:
@@ -160,7 +154,7 @@ def main(cfg: DictConfig) -> None:
         # Plot rewards and epsilon in the same graph and save in to file periodically
         if episode % cfg.plot_freq == 0 and episode > 0:
             plot_rewards_epsilons(rewards, epsilons, episode, cfg.plot_dir)
-            #plot_actionHistory(agent.agent_actions, cfg.plot_dir, episode)  # Plot agent actions
+            plot_actionHistory(agent.agent_actions, cfg.plot_dir, episode)  # Plot agent actions
             plot_losses_epsilons(losses, epsilons, episode, cfg.plot_dir)
 
         # Save model periodically
