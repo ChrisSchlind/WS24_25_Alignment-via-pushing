@@ -297,10 +297,6 @@ def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
     ax1.legend(loc="upper left")
     ax2.legend(loc="upper right")
 
-    # test if plot_dir exists, if not create it
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
-
     # Save the plot image
     plt.tight_layout()  # Avoid cutting off labels
     plt.savefig(f"{plot_dir}/dqn_rewards_epsilons_{episode}.png")
@@ -331,11 +327,7 @@ def plot_losses_epsilons(losses, epsilons, episode, plot_dir):
 
     # Add the legend
     ax1.legend(loc="upper left")
-    ax2.legend(loc="upper right")
-
-    # test if plot_dir exists, if not create it
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
+    ax2.legend(loc="upper right")    
 
     # Save the plot image
     plt.tight_layout()  # Avoid cutting off labels
@@ -419,6 +411,14 @@ def main(cfg: DictConfig) -> None:
     rewards = []
     epsilons = []
     losses = []
+
+    # Check if the model directory exists, if not create it
+    if not os.path.exists(cfg.model_dir):
+        os.makedirs(cfg.model_dir)
+
+    # Check if the plot directory exists, if not create it
+    if not os.path.exists(cfg.plot_dir):
+        os.makedirs(cfg.plot_dir)
 
     # Training loop
     for episode in range(cfg.num_episodes):
