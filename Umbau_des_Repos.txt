@@ -11,8 +11,12 @@ X - Dateien "data_generator.py" und "model.py" aus "transporter_network" lösche
 - Klassen aus train_DQN.py: ReplayBuffer, Agent und Supervisor in ein lib python file: lib/reinforcement_learning/DQN_util.py
     --> in dqnagent abfragen ob supervisor oder nicht (abhängig von netz), supervisor funktioniert nur für abolsute movements, sonst ausschalten!!!
     --> dqnagent unterschiedliche train functions in abhängigkeit des netzes
-- Klassen aus train_DQN.py: ConvDQN aus den drei Iteration: ResNet, FCN V2, CNN V2 in ein lib python file: lib/reinforcement_learning/ConvDQN.py und dort halt Klassen richtig benennen
+X - Klassen aus train_DQN.py: ConvDQN aus den drei Iteration: ResNet, FCN V2, CNN V2 in ein lib python file: lib/reinforcement_learning/ConvDQN.py und dort halt Klassen richtig benennen
+    --> für ResNet checken, ob input_shape durch 8 teilbar
     --> laden der Gewichte mit Zusatzfunktionen ausstatten, damit nur die passenden Gewichte für das jeweilige Netz geladen werden können sonst User Error message
+    --> choose_action und choose_train function im dqn agenten und damit in train_dqn nur eine funktion die aufgerufen wird und logik passiert direkt in der klasse
+    --> init von dqnAgent clean machen indem load_weights als funktion und initialize convdqn als funktion
+    --> action_dim und input_shape je netz in config definieren
 X- Ordner "util" in lib erzeugen
     --> alle _util.py dort hinverschieben --> passende config files erzeugen
 
@@ -27,6 +31,10 @@ Src/scripts_rl:
 - config Ordner: Unterordner pro Ordner/Thema aus lib machen und dort config files verwalten
 - DQN.yaml aufsplitten in sinnvolle Unter-YAMLs. --> bspw. workspace_bounds in bullet_env.yaml schieben und damit auch bei play_game.yaml rausschmeißen
 - Config-Aufbau t.b.d
+
+- Q-value learning: Alles mit Minima zurück Maxima ändern
+
+- plots mit flag in config file abfragen was man haben will
 
 
 
