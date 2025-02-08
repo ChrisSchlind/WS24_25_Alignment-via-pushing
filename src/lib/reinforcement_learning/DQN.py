@@ -1,5 +1,79 @@
 import tensorflow as tf
+from .resnet import ResNet
 
+class ConvDQN_ResNet(tf.keras.Model):
+    def __init__(self, initializer=tf.keras.initializers.GlorotUniform()):
+        super().__init__()
+        # Initializer for the weights
+        self.initializer = initializer
+
+        # ResNet Block 1: 
+        self.resnet_block_1 = ResNet(kernel_size=(3, 3), output_depth=64, include_batchnorm=True)
+
+        # ResNet Block 2: 
+        self.resnet_block_2 = ResNet(kernel_size=(3, 3), output_depth=256, include_batchnorm=True)        
+
+        # Conv2D layer for the heatmap output (H, W, 1)
+        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', kernel_initializer=self.initializer)
+
+    def call(self, inputs, **kwargs):
+        # Input shape: (batch_size, 88, 88, 6)
+
+        # First ResNet-Block
+        x = self.resnet_block_1(inputs)
+
+        # Second ResNet-Block
+        x = self.resnet_block_2(x)
+     
+        # Final heatmap (H, W, 1)
+        x = self.heatmap(x)
+
+        # Delete the last 2 rows and columns to get the correct heatmap size and remove ResNet errors at the edges
+        x = tf.keras.layers.Cropping2D(cropping=((2, 2), (2, 2)))(x)
+
+        # Return the heatmap (no activation because this is a continuous value map)
+        return x  # Heatmap of dimension (batch_size, 84, 84, 1)
+
+
+class ConvDQN_FCNV2(tf.keras.Model):
+    def __init__(self, initializer=tf.keras.initializers.GlorotUniform()):
+        super().__init__()
+        # Initializer for the weights
+        self.initializer = initializer
+
+        # 4 Conv-Layers, each with 'same' padding to keep the output size the same as the input size
+        self.conv1 = tf.keras.layers.Conv2D(32, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        self.conv2 = tf.keras.layers.Conv2D(64, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        self.conv3 = tf.keras.layers.Conv2D(128, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+        self.conv4 = tf.keras.layers.Conv2D(256, 3, strides=1, padding='same', activation="relu", kernel_initializer=self.initializer)
+
+        # Attention Map (Sigmoid to normalize the values between 0 and 1)
+        self.attention_map = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation="sigmoid", kernel_initializer=self.initializer)
+
+        # Final Conv2D layer for the heatmap output (H, W, 1)
+        self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation=None, kernel_initializer=self.initializer)
+
+    def call(self, x):
+        # x: (batch_size, height, width, channels)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+
+        # Generate attention map
+        attention = self.attention_map(x)
+
+        # Apply attention to the last convolutional layer's output
+        x = x * attention
+
+        # Final heatmap
+        x = self.heatmap(x)
+
+        # Crop the heatmap to the desired size of 84x84
+        x = tf.keras.layers.Cropping2D(cropping=((2, 2), (2, 2)))(x)
+
+        # Return the heatmap (no activation because this is a continuous value map)
+        return x  # Heatmap of dimension (batch_size, 84, 84, 1)
 
 
 class ConvDQN_CNNV2(tf.keras.Model):
