@@ -1,11 +1,6 @@
 *.pyc
 data/models/
 
-# Docker / Dockerfile:
-rl.Dockerfile
-build_image_rl.sh
-run_container_rl.sh
-
 src/scripts_rl/models/dqn/
 src/scripts_rl/models/plot/
 
