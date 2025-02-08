@@ -17,6 +17,7 @@ X - Klassen aus train_DQN.py: ConvDQN aus den drei Iteration: ResNet, FCN V2, CN
     --> choose_action und choose_train function im dqn agenten und damit in train_dqn nur eine funktion die aufgerufen wird und logik passiert direkt in der klasse
     --> init von dqnAgent clean machen indem load_weights als funktion und initialize convdqn als funktion
     --> action_dim und input_shape je netz in config definieren
+    --> netztyp in weights file und plots machen
 X- Ordner "util" in lib erzeugen
     --> alle _util.py dort hinverschieben --> passende config files erzeugen
 

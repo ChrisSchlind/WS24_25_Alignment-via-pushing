@@ -10,7 +10,6 @@ from loguru import logger
 class PushingEnv(BulletEnv):
     def __init__(
         self,
-        debug,
         bullet_client,
         robot,
         task_factory,
@@ -20,10 +19,9 @@ class PushingEnv(BulletEnv):
         step_size,
         gripper_offset,
         fixed_z_height,
-        absolut_movement,
         distance_TCP_obj_reward_scale,
         distance_obj_area_reward_scale,
-        iou_reward_scale,  # Add this parameter
+        iou_reward_scale,
         no_movement_threshold,
         max_moves_without_positive_reward,
         success_threshold_trans,
@@ -53,7 +51,6 @@ class PushingEnv(BulletEnv):
         self.gripper_offset = Affine(gripper_offset.translation, gripper_offset.rotation)  # Affine([0, 0, 0], [3.14159265359, 0, 1.57079632679])
         self.fixed_z_height = fixed_z_height
         self.movement_punishment = False
-        self.absolut_movement = absolut_movement
         self.distance_TCP_obj_reward_scale = distance_TCP_obj_reward_scale
         self.distance_obj_area_reward_scale = distance_obj_area_reward_scale
         self.iou_reward_scale = iou_reward_scale
@@ -71,13 +68,21 @@ class PushingEnv(BulletEnv):
         self.iou_list = []
         self.old_iou = []
         self.old_eef_pos = None
-        self.debug = debug
         self.moves_without_positive_reward = 0
         self.absolute_TCP_obj_distances = []
         self.distance_TCP_obj_rewards = []
         self.absolute_obj_area_distances = []
         self.distance_obj_area_rewards = []
         self.absolute_distance_TCP_obj_last = []
+        self.image_size = (84, 84)
+
+        # User info
+        logger.info("Training with following activated rewards:")
+        logger.info(f"Distance TCP-Object Reward: {self.activate_distance_TCP_obj_reward}")
+        logger.info(f"Distance Object-Area Reward: {self.activate_distance_obj_area_reward}")
+        logger.info(f"IoU Reward: {self.activate_iou_reward}")
+        logger.info(f"Moves without positive reward Reward: {self.activate_moves_without_positive_reward}")
+        logger.info(f"No movement punishment Reward: {self.activate_no_movement_punishment}")
 
     def reset(self):
         """Reset environment and return initial state"""
@@ -128,7 +133,7 @@ class PushingEnv(BulletEnv):
         # Get initial observation
         return self._get_observation()
 
-    def step(self, action):
+    def step(self, action, absolute_movement):
         """Execute action and return (next_state, reward, done, info)"""
         self.current_step += 1
         failed = False
@@ -136,7 +141,7 @@ class PushingEnv(BulletEnv):
         # Reset movement punishment flag
         self.movement_punishment = False
 
-        if self.absolut_movement:
+        if absolute_movement:
             # Normalize action between [0,1]
             action = (action + 1) / 2
 
@@ -228,7 +233,7 @@ class PushingEnv(BulletEnv):
         obs, tcp_position_pixel = self.teletentric_camera.get_observation()
 
         # Resize RGB image (500x500x3 -> 84x84x3)
-        rgb = cv2.resize(obs["rgb"], (84, 84), interpolation=cv2.INTER_AREA)
+        rgb = cv2.resize(obs["rgb"], self.image_size, interpolation=cv2.INTER_AREA)
 
         # Normalize RGB values between [0,1]
         rgb = rgb / 255.0
@@ -237,7 +242,7 @@ class PushingEnv(BulletEnv):
         depth = obs["depth"]
         if len(depth.shape) == 3:
             depth = depth[:, :, 0]  # Take first channel if depth is 3D
-        depth = cv2.resize(depth, (84, 84), interpolation=cv2.INTER_AREA)
+        depth = cv2.resize(depth, self.image_size, interpolation=cv2.INTER_AREA)
 
         # Note: Depth values are already normalized between [0,1] in the camera class
 
@@ -245,12 +250,12 @@ class PushingEnv(BulletEnv):
         depth = depth[..., np.newaxis]
 
         # Create blank image for tcp position
-        tcp_image = np.zeros((84, 84, 1), dtype=np.float32)
+        tcp_image = np.zeros((self.image_size[0], self.image_size[1], 1), dtype=np.float32)
 
         # Calculate tcp pixel position for smaller image
         if tcp_position_pixel is not None:
-            tcp_position_pixel[0] = min(int(tcp_position_pixel[0]/499 * 83), 83)
-            tcp_position_pixel[1] = min(int(tcp_position_pixel[1]/499 * 83), 83)
+            tcp_position_pixel[0] = min(int(tcp_position_pixel[0]/499 * (self.image_size[0] - 1)), (self.image_size[0] - 1))
+            tcp_position_pixel[1] = min(int(tcp_position_pixel[1]/499 * (self.image_size[0] - 1)), (self.image_size[0] - 1))
 
         # One-hot encoding of TCP position
         if tcp_position_pixel is not None:
@@ -548,6 +553,10 @@ class PushingEnv(BulletEnv):
                 angle <= self.success_threshold_rot or ((180.0 / obj.sym_axis) - angle) <= self.success_threshold_rot
             )  # Check if angle is within threshold for both directions
 
+    def set_image_size(self, input_shape):
+        self.image_size = input_shape[:2]
+        logger.debug(f"Image size set to {self.image_size}.")
+    
     def render(self):
         """Return the current camera view"""
         return self._get_observation()

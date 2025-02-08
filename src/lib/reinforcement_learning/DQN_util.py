@@ -12,18 +12,29 @@ from .DQN import ConvDQN_ResNet, ConvDQN_FCNV2, ConvDQN_CNNV2
 logger = logging.getLogger(__name__)
 
 class PrioritizedReplayBuffer:
-    def __init__(self, capacity=50000, alpha=0.6):
-        self.buffer = deque(maxlen=capacity)
-        self.losses = deque(maxlen=capacity)  # Store losses instead of priorities
+    def __init__(
+            self, 
+            buffer_size=50000, 
+            alpha=0.6,
+            initial_loss=100.0,
+            beta=0.4,
+            reward_range=(-1.0, 1.0),
+        ):
+        self.buffer_size = buffer_size
+        self.buffer = deque(maxlen=self.buffer_size)
+        self.losses = deque(maxlen=self.buffer_size)  # Store losses instead of priorities
         self.alpha = alpha
+        self.initial_loss = initial_loss
+        self.beta = beta
+        self.reward_range = reward_range
 
     # Add experience to the buffer with an initial high loss
-    def put(self, state, action, reward, next_state, done, initial_loss=100.0):
+    def put(self, state, action, reward, next_state, done):
         self.buffer.append([state, action, reward, next_state, done])
-        self.losses.append(initial_loss)
+        self.losses.append(self.initial_loss)
 
     # Sample a batch of experiences from the buffer based on loss
-    def sample(self, batch_size, beta=0.4, reward_range=(-1.0, 1.0)):
+    def sample(self, batch_size):
         losses = np.array(self.losses)
         losses[-1] = np.max(losses[:-1]) # set the newest losses to the same magnitude as the previous ones
         prob_dist = losses / np.sum(losses)
@@ -37,7 +48,7 @@ class PrioritizedReplayBuffer:
         indices_prob = np.random.choice(len(self.buffer), batch_size - half_batch_size, p=prob_dist)
         indices = np.concatenate((indices_random, indices_prob))
 
-        weights = (len(self.buffer) * prob_dist[indices]) ** (-beta)
+        weights = (len(self.buffer) * prob_dist[indices]) ** (-self.beta)
         weights /= weights.max()
 
         samples = [self.buffer[idx] for idx in indices]
@@ -48,7 +59,7 @@ class PrioritizedReplayBuffer:
 
         # Normalize the rewards to the desired range
         # Formula: norm_reward = (reward - min) / (max - min) * (range_max - range_min) + range_min
-        reward_min_new, reward_max_new = reward_range
+        reward_min_new, reward_max_new = self.reward_range
         rewards_normalized = (rewards - reward_min) / (reward_max - reward_min) * (reward_max_new - reward_min_new) + reward_min_new
 
         return states, actions, rewards_normalized, next_states, dones, indices, weights
@@ -65,9 +76,9 @@ class PrioritizedReplayBuffer:
 class DQNSupervisor:
     def __init__(
         self,
-        action_dim,
         env,
         workspace_bounds,
+        action_dim=2,
         min_obj_area_threshold=0.04,
         max_obj_area_threshold=0.6,
         extra_distance=0.05,
@@ -224,64 +235,74 @@ class DQNSupervisor:
 
         return float(distance)
 
-class DQNAgent:
+class DQNAgent_ResNet:
     def __init__(
         self,
-        action_dim,
         epsilon=0.8,
         epsilon_min=0.1,
         epsilon_decay=0.99995,
-        supervisor_epsilon=0.0,
+        supervisor_epsilon=0.5,
         gamma=0.99,
-        input_shape=(84, 84, 6),
         weights_path="",
         weights_dir="models/best",
-        learning_rate=0.00025,  # Add learning_rate parameter
-        use_pretrained_best_model=False,  # Add use_pretrained_best_model parameter
-        auto_set_epsilon=True,  # Add auto_set_epsilon parameter
+        use_pretrained_best_model=False,
+        auto_set_epsilon=True,
+        action_dim=None,
+        input_shape=(88, 88, 7),
+        learning_rate=0.00025,
     ):
-        self.action_dim = action_dim
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.supervisor_epsilon = supervisor_epsilon
         self.gamma = gamma
-        self.input_shape = input_shape
+        self.weights_path = weights_path
+        self.weights_dir = weights_dir
         self.use_pretrained_best_model = use_pretrained_best_model
         self.auto_set_epsilon = auto_set_epsilon
-        self.agent_actions = []  # Store only agent actions for plotting
-        self.supervisor_actions = []  # Store only supervisor actions for plotting
+        self.action_dim = action_dim
+        self.input_shape = input_shape
+        self.learning_rate = learning_rate
+        self.agent_actions = []
+        self.supervisor_actions = []
 
         # Set start episode to 0 if no weights are loaded
         self.start_episode = 0
 
-        # Create main and target networks
-        self.model = ConvDQN()
+        # Initialize the model
+        self.initialize_model()
+
+        # Load the weights from the file
+        self.load_weights()        
+
+    def initialize_model(self):
+        # Create main and target model based on config file  
+        self.model = ConvDQN_ResNet(input_shape=self.input_shape)
+        self.target_model = ConvDQN_ResNet(input_shape=self.input_shape)
+        logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
 
         # Build models with dummy input
         dummy_state = np.zeros((1,) + self.input_shape)
         self.model(dummy_state)  # Initialize with correct shape
-        logger.debug(f"Model initialized with input shape: {self.input_shape}")
-
-        # Create and initialize target model
-        self.target_model = ConvDQN()
         self.target_model(dummy_state)  # Initialize with correct shape
-        logger.debug("Target model initialized")
+        logger.debug("Model and Target Model initialized")
 
-        if self.use_pretrained_best_model and weights_path:
+    def load_weights(self):
+        # Load the weights from the file
+        if self.use_pretrained_best_model and self.weights_path:
             try:
-                weights_file_path = os.path.join(weights_dir, weights_path)
+                weights_file_path = os.path.join(self.weights_dir, self.weights_path)
 
                 # Load the weights from the file
                 self.model.load_weights(weights_file_path)
                 logger.debug(f"Loaded weights from {weights_file_path}")
 
                 # Extract the episode number from the weights file
-                self.start_episode = int(weights_path.split("_")[-1])
+                self.start_episode = int(self.weights_path.split("_")[-1])
 
                 # Calculate the epsilon value based on the episode number and current set of parameters
                 if self.auto_set_epsilon:
-                    self.epsilon = max(epsilon_min, epsilon * (epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
+                    self.epsilon = max(self.epsilon_min, self.epsilon * (self.epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
                     logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
                 else:
                     self.start_episode = 0
@@ -294,9 +315,9 @@ class DQNAgent:
 
         # Copy the weights from the main model also to the target model
         self.target_model.set_weights(self.model.get_weights())
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)  # Use the learning_rate parameter
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)  # Use the learning_rate parameter
 
-    def get_action_fcn(self, state, supervisor, training=True):
+    def get_action(self, state, supervisor, training=True):
         # Explanation of the epsilon-greedy strategy:
         # With probability epsilon, take a random action (exploration) or ask the supervisor for an action
         # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
@@ -322,7 +343,7 @@ class DQNAgent:
             # Direct continuous output from network
             heatmap = self.model(state)[0].numpy()  
 
-            action, pixels = self._choose_action_from_min_area(heatmap) # output is vector [x, y] with values between -1 and 1
+            action, pixels = self._choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
             logger.debug(f"Action for Agent: {action} and pixels: {pixels}")
             self.agent_actions.append(action)  # Store agent actions for plotting
 
@@ -332,38 +353,12 @@ class DQNAgent:
         if len(self.supervisor_actions) > 10500:
             self.supervisor_actions = self.supervisor_actions[-10500:]
 
-        return action    
+        # Set absolute movement
+        absolute_movement = True
 
-    def get_action_cnn(self, state, training=True):
-        # Explanation of the epsilon-greedy strategy:
-        # With probability epsilon, take a random action (exploration) 
+        return action, absolute_movement
 
-        if training and np.random.random() < self.epsilon:
-            logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
-            action = np.zeros(self.action_dim)
-            action[np.random.choice(self.action_dim)] = 1
-            self.agent_actions.append(action)
-            return action
-        
-        else:
-            logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
-
-            # Add batch dimension to the state
-            state = np.expand_dims(state, axis=0)
-
-            # Direct continuous output from network
-            action = self.model(state)[0].numpy()
-            logger.debug(f"Action for Agent: {action}")
-
-            self.agent_actions.append(action)  # Store agent actions for plotting
-
-        # Purge oldest actions if the length exceeds 10500
-        if len(self.agent_actions) > 10500:
-            self.agent_actions = self.agent_actions[-10500:]
-
-        return action
-
-    def train_fcn(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
+    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
@@ -451,7 +446,467 @@ class DQNAgent:
 
         return weighted_loss.numpy()
 
-    def train_cnn(self, replay_buffer, batch_size=32, train_start_size=4000, beta=0.4):
+    def update_target(self):
+        self.target_model.set_weights(self.model.get_weights())
+
+    def _choose_action_from_max_area(self, heatmap, window_size=3):
+        # Squeeze the batch and channel dimensions
+        heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
+
+        # Find the position with the maximum value in the heatmap
+        max_index = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+
+        # Extract the window around the maximum value
+        i_min = max(max_index[0] - window_size // 2, 0)
+        i_max = min(max_index[0] + window_size // 2 + 1, heatmap.shape[0])
+        j_min = max(max_index[1] - window_size // 2, 0)
+        j_max = min(max_index[1] + window_size // 2 + 1, heatmap.shape[1])
+
+        # Extract the local area around the maximum value
+        local_area = heatmap[i_min:i_max, j_min:j_max]
+
+        # Find the maximum value in the local area
+        local_max_index = np.unravel_index(np.argmax(local_area), local_area.shape)
+
+        # Calculate the global index of the maximum value
+        global_index = (local_max_index[0] + i_min, local_max_index[1] + j_min)        
+
+        # Normalize the (i, j) position to the range [-1, 1]
+        height, width = heatmap.shape
+        normalized_x = 2 * global_index[0] / (height - 1) - 1
+        normalized_y = 2 * global_index[1] / (width - 1) - 1
+
+        # DEBUG: Convert heatmap to rgb, resize it to 500x500, make max value 255 and min value 0 and display it with opencv
+        # Normalize the heatmap to the range [0, 1]
+        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap) + 1e-8)
+
+        # Resize heatmap to 500x500
+        heatmap_resized = cv2.resize(heatmap, (500, 500), interpolation=cv2.INTER_NEAREST)
+
+        # Copy heatmap
+        copy_heatmap = copy.deepcopy(heatmap_resized)
+
+        # Change
+        copy_heatmap[global_index[0],global_index[1]] = 1
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Original Grayscale Heatmap", copy_heatmap)
+        cv2.waitKey(1)
+
+        # Convert heatmap to RGB
+        heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+        # Get max value of heatmap and min value of heatmap
+        max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+        min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
+
+        # Make pixel at max_value white and pixel at min_value black
+        heatmap_rgb[max_pos[0], max_pos[1], :] = [255, 255, 255]  # white
+        heatmap_rgb[min_pos[0], min_pos[1], :] = [0, 0, 0]  # black
+
+        # Resize heatmap to 500x500
+        heatmap_rgb_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Spectrum Heatmap", heatmap_rgb_resized)
+        cv2.waitKey(1)        
+
+        return np.array([normalized_x, normalized_y]), global_index
+
+class DQNAgent_FCN:
+    def __init__(
+        self,
+        epsilon=0.8,
+        epsilon_min=0.1,
+        epsilon_decay=0.99995,
+        supervisor_epsilon=0.5,
+        gamma=0.99,
+        weights_path="",
+        weights_dir="models/best",
+        use_pretrained_best_model=False,
+        auto_set_epsilon=True,
+        action_dim=None,
+        input_shape=(88, 88, 7),
+        learning_rate=0.00025,
+    ):
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        self.supervisor_epsilon = supervisor_epsilon
+        self.gamma = gamma
+        self.weights_path = weights_path
+        self.weights_dir = weights_dir
+        self.use_pretrained_best_model = use_pretrained_best_model
+        self.auto_set_epsilon = auto_set_epsilon
+        self.action_dim = action_dim
+        self.input_shape = input_shape
+        self.learning_rate = learning_rate
+        self.agent_actions = []
+        self.supervisor_actions = []
+
+        # Set start episode to 0 if no weights are loaded
+        self.start_episode = 0
+
+        # Initialize the model
+        self.initialize_model()
+
+        # Load the weights from the file
+        self.load_weights()        
+
+    def initialize_model(self):
+        # Create main and target model based on config file  
+        self.model = ConvDQN_FCNV2(input_shape=self.input_shape)
+        self.target_model = ConvDQN_FCNV2(input_shape=self.input_shape)
+        logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
+
+        # Build models with dummy input
+        dummy_state = np.zeros((1,) + self.input_shape)
+        self.model(dummy_state)  # Initialize with correct shape
+        self.target_model(dummy_state)  # Initialize with correct shape
+        logger.debug("Model and Target Model initialized")
+
+    def load_weights(self):
+        # Load the weights from the file
+        if self.use_pretrained_best_model and self.weights_path:
+            try:
+                weights_file_path = os.path.join(self.weights_dir, self.weights_path)
+
+                # Load the weights from the file
+                self.model.load_weights(weights_file_path)
+                logger.debug(f"Loaded weights from {weights_file_path}")
+
+                # Extract the episode number from the weights file
+                self.start_episode = int(self.weights_path.split("_")[-1])
+
+                # Calculate the epsilon value based on the episode number and current set of parameters
+                if self.auto_set_epsilon:
+                    self.epsilon = max(self.epsilon_min, self.epsilon * (self.epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
+                    logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
+                else:
+                    self.start_episode = 0
+                    logger.debug(f"Keeping epsilon at {self.epsilon:.2f} and reset the start episode number to 0")
+
+            except Exception as e:
+                logger.error(f"Error loading weights from {weights_file_path}: {e}")
+        else:
+            logger.debug("Starting model with random weights")
+
+        # Copy the weights from the main model also to the target model
+        self.target_model.set_weights(self.model.get_weights())
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)  # Use the learning_rate parameter
+
+    def get_action(self, state, supervisor, training=True):
+        # Explanation of the epsilon-greedy strategy:
+        # With probability epsilon, take a random action (exploration) or ask the supervisor for an action
+        # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
+
+        if training and np.random.random() < self.epsilon:
+
+            if np.random.random() < self.supervisor_epsilon:
+                # Ask supervisor for action
+                logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
+                action = supervisor.ask_supervisor()
+                self.supervisor_actions.append(action)  # Store supervisor actions for plotting
+            else:
+                logger.info(f"Random action taken with {self.epsilon:.2f} and supervisor epsilon {self.supervisor_epsilon:.2f}")
+                action = np.random.uniform(-1, 1, self.action_dim)
+                self.supervisor_actions.append(action)
+
+            return action
+        
+        else:
+            logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+            state = np.expand_dims(state, axis=0)
+
+            # Direct continuous output from network
+            heatmap = self.model(state)[0].numpy()  
+
+            action, pixels = self._choose_action_from_max_area(heatmap) # output is vector [x, y] with values between -1 and 1
+            logger.debug(f"Action for Agent: {action} and pixels: {pixels}")
+            self.agent_actions.append(action)  # Store agent actions for plotting
+
+        # Purge oldest actions if the length exceeds 10500
+        if len(self.agent_actions) > 10500:
+            self.agent_actions = self.agent_actions[-10500:]
+        if len(self.supervisor_actions) > 10500:
+            self.supervisor_actions = self.supervisor_actions[-10500:]
+
+        # Set absolute movement
+        absolute_movement = True
+
+        return action, absolute_movement
+
+    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
+        # Check if the replay buffer has enough samples to train
+        if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
+            logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
+            return
+
+        # Sample a batch from the replay buffer
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
+
+        # Predict heatmaps for the next states using the target model
+        target_heatmaps = self.target_model(next_states).numpy()  # (batch_size, H, W, 1)
+
+        # Initialize the list to store the maximum Q-values from the local neighborhood
+        next_values = []
+        pixel_x_list = []
+        pixel_y_list = []
+
+        # Iterate through each heatmap to calculate the maximum Q-value within a local neighborhood of the current action
+        # This ignores artefacts and focuses on the most relevant part of the heatmap
+        # This explicit method to calculate the maximum Q-value only works because the heatmaps represents to total action space (of the robot, camera bounds and movement bounds need to match)
+        for i, heatmap in enumerate(target_heatmaps):
+            # Normalize the heatmap
+            heatmap_normalized = (heatmap - np.mean(heatmap)) / (np.std(heatmap) + 1e-8)
+
+            # Smooth the heatmap to reduce noise
+            heatmap_smoothed = scipy.ndimage.gaussian_filter(heatmap_normalized, sigma=1)
+
+            # Convert action to pixel coordinates
+            action_x, action_y = actions[i]
+            height, width = heatmap_smoothed.shape[:2]
+            pixel_x = int((action_x + 1) * (width - 1) / 2)
+            pixel_y = int((action_y + 1) * (height - 1) / 2)
+            
+            # Append pixel coordinates to the lists
+            pixel_x_list.append(pixel_x)
+            pixel_y_list.append(pixel_y)
+
+            # Define the local window around the action's pixel
+            x_min = max(0, pixel_x - window_size // 2)
+            x_max = min(width, pixel_x + window_size // 2 + 1)
+            y_min = max(0, pixel_y - window_size // 2)
+            y_max = min(height, pixel_y + window_size // 2 + 1)
+
+            # Extract the local neighborhood
+            local_heatmap = heatmap_smoothed[y_min:y_max, x_min:x_max]
+
+            # Find the minium value in the local neighborhood
+            min_index_local = np.unravel_index(np.argmin(local_heatmap), local_heatmap.shape)
+
+            # Map the local index back to global coordinates
+            global_index = (min_index_local[0] + y_min, min_index_local[1] + x_min)
+
+            # Append the maximum Q-value from the local neighborhood
+            next_values.append(heatmap_smoothed[global_index])
+
+        next_values = np.array(next_values).squeeze()  # Convert list to numpy array (batch_size,)
+
+        # Calculate target Q-values
+        target_values = rewards + (1 - dones) * next_values * self.gamma
+
+        # Train the model
+        with tf.GradientTape() as tape:
+            # Predict Q-values for the current states
+            values = self.model(states)
+            
+            # Gather Q-values for the executed actions
+            values = tf.gather_nd(values, tf.stack([np.arange(len(values)), pixel_y_list, pixel_x_list], axis=1))
+
+            # Compute the loss
+            loss = tf.keras.losses.MSE(target_values, values)
+            weighted_loss = weights * loss
+
+            logger.debug(f"Weighted Loss: {weighted_loss.numpy()}")
+
+        # Compute gradients and apply updates
+        grads = tape.gradient(weighted_loss, self.model.trainable_variables)
+        grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
+        self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+
+        # Update priorities in the replay buffer
+        replay_buffer.update_losses(indices, weighted_loss.numpy())
+
+        # Perform epsilon annealing
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+        return weighted_loss.numpy()
+
+    def update_target(self):
+        self.target_model.set_weights(self.model.get_weights())
+
+    def _choose_action_from_max_area(self, heatmap, window_size=3):
+        # Squeeze the batch and channel dimensions
+        heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
+
+        # Find the position with the maximum value in the heatmap
+        max_index = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+
+        # Extract the window around the maximum value
+        i_min = max(max_index[0] - window_size // 2, 0)
+        i_max = min(max_index[0] + window_size // 2 + 1, heatmap.shape[0])
+        j_min = max(max_index[1] - window_size // 2, 0)
+        j_max = min(max_index[1] + window_size // 2 + 1, heatmap.shape[1])
+
+        # Extract the local area around the maximum value
+        local_area = heatmap[i_min:i_max, j_min:j_max]
+
+        # Find the maximum value in the local area
+        local_max_index = np.unravel_index(np.argmax(local_area), local_area.shape)
+
+        # Calculate the global index of the maximum value
+        global_index = (local_max_index[0] + i_min, local_max_index[1] + j_min)        
+
+        # Normalize the (i, j) position to the range [-1, 1]
+        height, width = heatmap.shape
+        normalized_x = 2 * global_index[0] / (height - 1) - 1
+        normalized_y = 2 * global_index[1] / (width - 1) - 1
+
+        # DEBUG: Convert heatmap to rgb, resize it to 500x500, make max value 255 and min value 0 and display it with opencv
+        # Normalize the heatmap to the range [0, 1]
+        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap) + 1e-8)
+
+        # Resize heatmap to 500x500
+        heatmap_resized = cv2.resize(heatmap, (500, 500), interpolation=cv2.INTER_NEAREST)
+
+        # Copy heatmap
+        copy_heatmap = copy.deepcopy(heatmap_resized)
+
+        # Change
+        copy_heatmap[global_index[0],global_index[1]] = 1
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Original Grayscale Heatmap", copy_heatmap)
+        cv2.waitKey(1)
+
+        # Convert heatmap to RGB
+        heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+        # Get max value of heatmap and min value of heatmap
+        max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+        min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
+
+        # Make pixel at max_value white and pixel at min_value black
+        heatmap_rgb[max_pos[0], max_pos[1], :] = [255, 255, 255]  # white
+        heatmap_rgb[min_pos[0], min_pos[1], :] = [0, 0, 0]  # black
+
+        # Resize heatmap to 500x500
+        heatmap_rgb_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Spectrum Heatmap", heatmap_rgb_resized)
+        cv2.waitKey(1)        
+
+        return np.array([normalized_x, normalized_y]), global_index
+
+class DQNAgent_CNN:
+    def __init__(
+        self,
+        epsilon=0.8,
+        epsilon_min=0.1,
+        epsilon_decay=0.99995,
+        supervisor_epsilon=0.0,
+        gamma=0.99,
+        weights_path="",
+        weights_dir="models/best",
+        use_pretrained_best_model=False,
+        auto_set_epsilon=True,
+        action_dim=4,
+        input_shape=(84, 84, 7),
+        learning_rate=0.00025,
+    ):
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        self.supervisor_epsilon = supervisor_epsilon
+        self.gamma = gamma
+        self.weights_path = weights_path
+        self.weights_dir = weights_dir
+        self.use_pretrained_best_model = use_pretrained_best_model
+        self.auto_set_epsilon = auto_set_epsilon
+        self.action_dim = action_dim
+        self.input_shape = input_shape
+        self.learning_rate = learning_rate
+        self.agent_actions = []
+        self.supervisor_actions = []
+
+        # Set start episode to 0 if no weights are loaded
+        self.start_episode = 0
+
+        # Initialize the model
+        self.initialize_model()
+
+        # Load the weights from the file
+        self.load_weights()        
+
+    def initialize_model(self):
+        # Create main and target model based on config file  
+        self.model = ConvDQN_CNNV2(input_shape=self.input_shape)
+        self.target_model = ConvDQN_CNNV2(input_shape=self.input_shape)
+        logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
+
+        # Build models with dummy input
+        dummy_state = np.zeros((1,) + self.input_shape)
+        self.model(dummy_state)  # Initialize with correct shape
+        self.target_model(dummy_state)  # Initialize with correct shape
+        logger.debug("Model and Target Model initialized")
+
+    def load_weights(self):
+        # Load the weights from the file
+        if self.use_pretrained_best_model and self.weights_path:
+            try:
+                weights_file_path = os.path.join(self.weights_dir, self.weights_path)
+
+                # Load the weights from the file
+                self.model.load_weights(weights_file_path)
+                logger.debug(f"Loaded weights from {weights_file_path}")
+
+                # Extract the episode number from the weights file
+                self.start_episode = int(self.weights_path.split("_")[-1])
+
+                # Calculate the epsilon value based on the episode number and current set of parameters
+                if self.auto_set_epsilon:
+                    self.epsilon = max(self.epsilon_min, self.epsilon * (self.epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
+                    logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
+                else:
+                    self.start_episode = 0
+                    logger.debug(f"Keeping epsilon at {self.epsilon:.2f} and reset the start episode number to 0")
+
+            except Exception as e:
+                logger.error(f"Error loading weights from {weights_file_path}: {e}")
+        else:
+            logger.debug("Starting model with random weights")
+
+        # Copy the weights from the main model also to the target model
+        self.target_model.set_weights(self.model.get_weights())
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)  # Use the learning_rate parameter
+
+    def get_action(self, state, supervisor=None, training=True): # supervisor needed so amount of inputs is the same for all agents
+        # Explanation of the epsilon-greedy strategy:
+        # With probability epsilon, take a random action (exploration) 
+
+        if training and np.random.random() < self.epsilon:
+            logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
+            action = np.zeros(self.action_dim)
+            action[np.random.choice(self.action_dim)] = 1
+            self.agent_actions.append(action)
+            return action
+        
+        else:
+            logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
+
+            # Add batch dimension to the state
+            state = np.expand_dims(state, axis=0)
+
+            # Direct continuous output from network
+            action = self.model(state)[0].numpy()
+            logger.debug(f"Action for Agent: {action}")
+
+            self.agent_actions.append(action)  # Store agent actions for plotting
+
+        # Purge oldest actions if the length exceeds 10500
+        if len(self.agent_actions) > 10500:
+            self.agent_actions = self.agent_actions[-10500:]
+
+        # Set absolute movement
+        absolute_movement = False
+
+        return action, absolute_movement
+
+
+    def train(self, replay_buffer, batch_size=32, train_start_size=4000, beta=0.4):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
@@ -496,69 +951,26 @@ class DQNAgent:
 
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
-
-    def _choose_action_from_min_area(self, heatmap, window_size=3):
-        # Squeeze the batch and channel dimensions
-        heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
-
-        # Find the position with the minimum value in the heatmap
-        min_index = np.unravel_index(np.argmin(heatmap), heatmap.shape)
-
-        # Extract the window around the minimum value
-        i_min = max(min_index[0] - window_size // 2, 0)
-        i_max = min(min_index[0] + window_size // 2 + 1, heatmap.shape[0])
-        j_min = max(min_index[1] - window_size // 2, 0)
-        j_max = min(min_index[1] + window_size // 2 + 1, heatmap.shape[1])
-
-        # Extract the local area around the minimum value
-        local_area = heatmap[i_min:i_max, j_min:j_max]
-
-        # Find the minimum value in the local area
-        local_min_index = np.unravel_index(np.argmin(local_area), local_area.shape)
-
-        # Calculate the global index of the maximum value
-        global_index = (local_min_index[0] + i_min, local_min_index[1] + j_min)        
-
-        # Normalize the (i, j) position to the range [-1, 1]
-        height, width = heatmap.shape
-        normalized_x = 2 * global_index[0] / (height - 1) - 1
-        normalized_y = 2 * global_index[1] / (width - 1) - 1
-
-        # DEBUG: Convert heatmap to rgb, resize it to 500x500, make max value 255 and min value 0 and display it with opencv
-        # Normalize the heatmap to the range [0, 1]
-        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap) + 1e-8)
-
-        # Resize heatmap to 500x500
-        heatmap_resized = cv2.resize(heatmap, (500, 500), interpolation=cv2.INTER_NEAREST)
-
-        # Copy heatmap
-        copy_heatmap = copy.deepcopy(heatmap_resized)
-
-        # Change
-        copy_heatmap[global_index[0],global_index[1]] = 1
-
-        # Display the heatmap with OpenCV
-        cv2.imshow("Original Grayscale Heatmap", copy_heatmap)
-        cv2.waitKey(1)
-
-        # Convert heatmap to RGB
-        heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
-
-        # Get max value of heatmap and min value of heatmap
-        max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
-        min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
-
-        # Make pixel at max_value black and pixel at min_value white
-        heatmap_rgb[max_pos[0], max_pos[1], :] = [0, 0, 0]  # black
-        heatmap_rgb[min_pos[0], min_pos[1], :] = [255, 255, 255]  # white
-
-        # Resize heatmap to 500x500
-        heatmap_rgb_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
-
-        # Display the heatmap with OpenCV
-        cv2.imshow("Spectrum Heatmap", heatmap_rgb_resized)
-        cv2.waitKey(1)        
-
-        return np.array([normalized_x, normalized_y]), global_index
-
     
+class DQNAgent:
+    def __init__(
+        self,
+        model_type="FCN",
+        dqn_agent_resnet=None,
+        dqn_agent_fcn=None,
+        dqn_agent_cnn=None,
+    ):        
+        self.model_type = model_type
+
+        # Choose the correct agent based on the model type
+        if model_type == "FCN":
+            self.agent = dqn_agent_fcn
+        elif model_type == "CNN":
+            self.agent = dqn_agent_cnn
+        elif model_type == "ResNet":
+            self.agent = dqn_agent_resnet
+        else:
+            raise ValueError(f"Invalid model type: {model_type}")
+        
+    def set_model(self):
+        return self.agent

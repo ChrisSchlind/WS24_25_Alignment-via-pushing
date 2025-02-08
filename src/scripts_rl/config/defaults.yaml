@@ -1,7 +1,7 @@
 defaults:
   - default_hydra_config
   - default_workspace_bounds
-  - env: bullet_env
+  - pushing_env: pushing_env
   - robot: ur10_cell
 
 log_level: INFO

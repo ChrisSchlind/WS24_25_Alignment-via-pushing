@@ -1,0 +1,10 @@
+# Movement bounds (in meters)
+# Movement bounds need to match the orthographic bounds of the camera
+# find in teletentric_camera_config.yaml
+# Center of the Camera is at x=0.6, y=0.0, z=0.1
+movement_bounds:
+  - [0.15, 1.05]  # x bounds
+  - [-0.45, 0.45]  # y bounds
+  - [-0.5, 0.5]  # z bounds
+
+fixed_z_height: 0.005

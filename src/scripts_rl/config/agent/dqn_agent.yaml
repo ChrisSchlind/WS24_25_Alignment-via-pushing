@@ -1,0 +1,6 @@
+_target_: reinforcement_learning.DQN_util.DQNAgent
+
+dqn_agent_resnet: ../dqn_resnet
+dqn_agent_fcn: ../dqn_fcn
+dqn_agent_cnn: ../dqn_cnn
+  

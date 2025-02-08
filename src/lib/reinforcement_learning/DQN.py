@@ -16,7 +16,7 @@ class ConvDQN_ResNet(tf.keras.Model):
         # Conv2D layer for the heatmap output (H, W, 1)
         self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', kernel_initializer=self.initializer)
 
-    def call(self, inputs, **kwargs):
+    def call(self, inputs):
         # Input shape: (batch_size, 88, 88, 6)
 
         # First ResNet-Block
@@ -54,7 +54,9 @@ class ConvDQN_FCNV2(tf.keras.Model):
         self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation=None, kernel_initializer=self.initializer)
 
     def call(self, x):
-        # x: (batch_size, height, width, channels)
+        # Input shape: (batch_size, 88, 88, 6)
+
+        # 4 Conv-Layers
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
@@ -96,7 +98,9 @@ class ConvDQN_CNNV2(tf.keras.Model):
         self.output_layer = tf.keras.layers.Dense(action_dim, activation="softmax")
 
     def call(self, x):
-        # x: (batch_size, height, width, channels)
+        # Input shape: (batch_size, 88, 88, 6)
+
+        # Convolutional layers
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)

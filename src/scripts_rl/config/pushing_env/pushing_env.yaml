@@ -1,0 +1,9 @@
+_target_: bullet_env.pushing_env.PushingEnv
+coordinate_axes_urdf_path: ${data_root}/assets/util/coordinate_axes.urdf
+
+bullet_client: ${bullet_client}
+robot: ${robot}
+task_factory: ${task_factory}
+teletentric_camera: ${teletentric_camera}
+workspace_bounds: ${workspace_bounds}
+movement_bounds: ${movement_bounds}

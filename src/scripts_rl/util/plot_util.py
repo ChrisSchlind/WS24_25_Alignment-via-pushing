@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_actionHistory(agent_actions, plot_dir, episode):
+def plot_action_history(agent_actions, episode, plot_dir, model_type):
     """Plot agent actions with fading colors and save the plot."""
     fig, ax = plt.subplots()
     num_agent_actions = len(agent_actions)
@@ -17,11 +17,11 @@ def plot_actionHistory(agent_actions, plot_dir, episode):
 
     # Save the plot image
     plt.tight_layout()
-    plt.savefig(f"{plot_dir}/agent_actions_{episode}.png")
+    plt.savefig(f"{plot_dir}/agent_{model_type}_actions_{episode}.png")
     plt.close()
 
 
-def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
+def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir, model_type):
     # Create the figure and the first y-axis
     fig, ax1 = plt.subplots()
 
@@ -45,15 +45,15 @@ def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir):
 
     # Save the plot image
     plt.tight_layout()  # Avoid cutting off labels
-    plt.savefig(f"{plot_dir}/dqn_rewards_epsilons_{episode}.png")
+    plt.savefig(f"{plot_dir}/dqn_{model_type}_rewards_epsilons_{episode}.png")
     plt.close()
 
     # Save the rewards and epsilons to a CSV file
     data = np.column_stack((rewards, epsilons))
-    np.savetxt(f"{plot_dir}/dqn_rewards_epsilons_{episode}.csv", data, delimiter=",", header="Reward,Epsilon", comments="")
+    np.savetxt(f"{plot_dir}/dqn_{model_type}_rewards_epsilons_{episode}.csv", data, delimiter=",", header="Reward,Epsilon", comments="")
 
 
-def plot_losses_epsilons(losses, epsilons, episode, plot_dir):
+def plot_losses_epsilons(losses, epsilons, episode, plot_dir, model_type):
     # Create the figure and the first y-axis
     fig, ax1 = plt.subplots()
 
@@ -77,9 +77,9 @@ def plot_losses_epsilons(losses, epsilons, episode, plot_dir):
 
     # Save the plot image
     plt.tight_layout()  # Avoid cutting off labels
-    plt.savefig(f"{plot_dir}/dqn_losses_epsilons_{episode}.png")
+    plt.savefig(f"{plot_dir}/dqn_{model_type}_losses_epsilons_{episode}.png")
     plt.close()
 
     # Save the losses and epsilons to a CSV file
     data = np.column_stack((losses, epsilons))
-    np.savetxt(f"{plot_dir}/dqn_losses_epsilons_{episode}.csv", data, delimiter=",", header="Losses,Epsilon", comments="")
+    np.savetxt(f"{plot_dir}/dqn_{model_type}_losses_epsilons_{episode}.csv", data, delimiter=",", header="Losses,Epsilon", comments="")
