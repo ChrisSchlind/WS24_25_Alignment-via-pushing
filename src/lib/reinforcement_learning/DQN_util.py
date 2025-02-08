@@ -4,6 +4,10 @@ import tensorflow as tf
 from collections import deque
 import logging
 import random
+import cv2
+import copy
+import scipy.ndimage
+from .DQN import ConvDQN_ResNet, ConvDQN_FCNV2, ConvDQN_CNNV2
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +296,45 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)  # Use the learning_rate parameter
 
-    def get_action(self, state, training=True):
+    def get_action_fcn(self, state, supervisor, training=True):
+        # Explanation of the epsilon-greedy strategy:
+        # With probability epsilon, take a random action (exploration) or ask the supervisor for an action
+        # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
+
+        if training and np.random.random() < self.epsilon:
+
+            if np.random.random() < self.supervisor_epsilon:
+                # Ask supervisor for action
+                logger.info(f"Supervisor-Action with epsilon {self.epsilon:.2f}")
+                action = supervisor.ask_supervisor()
+                self.supervisor_actions.append(action)  # Store supervisor actions for plotting
+            else:
+                logger.info(f"Random action taken with {self.epsilon:.2f} and supervisor epsilon {self.supervisor_epsilon:.2f}")
+                action = np.random.uniform(-1, 1, self.action_dim)
+                self.supervisor_actions.append(action)
+
+            return action
+        
+        else:
+            logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+            state = np.expand_dims(state, axis=0)
+
+            # Direct continuous output from network
+            heatmap = self.model(state)[0].numpy()  
+
+            action, pixels = self._choose_action_from_min_area(heatmap) # output is vector [x, y] with values between -1 and 1
+            logger.debug(f"Action for Agent: {action} and pixels: {pixels}")
+            self.agent_actions.append(action)  # Store agent actions for plotting
+
+        # Purge oldest actions if the length exceeds 10500
+        if len(self.agent_actions) > 10500:
+            self.agent_actions = self.agent_actions[-10500:]
+        if len(self.supervisor_actions) > 10500:
+            self.supervisor_actions = self.supervisor_actions[-10500:]
+
+        return action    
+
+    def get_action_cnn(self, state, training=True):
         # Explanation of the epsilon-greedy strategy:
         # With probability epsilon, take a random action (exploration) 
 
@@ -321,7 +363,95 @@ class DQNAgent:
 
         return action
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=4000, beta=0.4):
+    def train_fcn(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
+        # Check if the replay buffer has enough samples to train
+        if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
+            logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
+            return
+
+        # Sample a batch from the replay buffer
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
+
+        # Predict heatmaps for the next states using the target model
+        target_heatmaps = self.target_model(next_states).numpy()  # (batch_size, H, W, 1)
+
+        # Initialize the list to store the maximum Q-values from the local neighborhood
+        next_values = []
+        pixel_x_list = []
+        pixel_y_list = []
+
+        # Iterate through each heatmap to calculate the maximum Q-value within a local neighborhood of the current action
+        # This ignores artefacts and focuses on the most relevant part of the heatmap
+        # This explicit method to calculate the maximum Q-value only works because the heatmaps represents to total action space (of the robot, camera bounds and movement bounds need to match)
+        for i, heatmap in enumerate(target_heatmaps):
+            # Normalize the heatmap
+            heatmap_normalized = (heatmap - np.mean(heatmap)) / (np.std(heatmap) + 1e-8)
+
+            # Smooth the heatmap to reduce noise
+            heatmap_smoothed = scipy.ndimage.gaussian_filter(heatmap_normalized, sigma=1)
+
+            # Convert action to pixel coordinates
+            action_x, action_y = actions[i]
+            height, width = heatmap_smoothed.shape[:2]
+            pixel_x = int((action_x + 1) * (width - 1) / 2)
+            pixel_y = int((action_y + 1) * (height - 1) / 2)
+            
+            # Append pixel coordinates to the lists
+            pixel_x_list.append(pixel_x)
+            pixel_y_list.append(pixel_y)
+
+            # Define the local window around the action's pixel
+            x_min = max(0, pixel_x - window_size // 2)
+            x_max = min(width, pixel_x + window_size // 2 + 1)
+            y_min = max(0, pixel_y - window_size // 2)
+            y_max = min(height, pixel_y + window_size // 2 + 1)
+
+            # Extract the local neighborhood
+            local_heatmap = heatmap_smoothed[y_min:y_max, x_min:x_max]
+
+            # Find the minium value in the local neighborhood
+            min_index_local = np.unravel_index(np.argmin(local_heatmap), local_heatmap.shape)
+
+            # Map the local index back to global coordinates
+            global_index = (min_index_local[0] + y_min, min_index_local[1] + x_min)
+
+            # Append the maximum Q-value from the local neighborhood
+            next_values.append(heatmap_smoothed[global_index])
+
+        next_values = np.array(next_values).squeeze()  # Convert list to numpy array (batch_size,)
+
+        # Calculate target Q-values
+        target_values = rewards + (1 - dones) * next_values * self.gamma
+
+        # Train the model
+        with tf.GradientTape() as tape:
+            # Predict Q-values for the current states
+            values = self.model(states)
+            
+            # Gather Q-values for the executed actions
+            values = tf.gather_nd(values, tf.stack([np.arange(len(values)), pixel_y_list, pixel_x_list], axis=1))
+
+            # Compute the loss
+            loss = tf.keras.losses.MSE(target_values, values)
+            weighted_loss = weights * loss
+
+            logger.debug(f"Weighted Loss: {weighted_loss.numpy()}")
+
+        # Compute gradients and apply updates
+        grads = tape.gradient(weighted_loss, self.model.trainable_variables)
+        grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
+        self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+
+        # Update priorities in the replay buffer
+        replay_buffer.update_losses(indices, weighted_loss.numpy())
+
+        # Perform epsilon annealing
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+        return weighted_loss.numpy()
+
+    def train_cnn(self, replay_buffer, batch_size=32, train_start_size=4000, beta=0.4):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
@@ -366,4 +496,69 @@ class DQNAgent:
 
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
+
+    def _choose_action_from_min_area(self, heatmap, window_size=3):
+        # Squeeze the batch and channel dimensions
+        heatmap = heatmap.squeeze()  # Remove batch and channel dimension (if any)
+
+        # Find the position with the minimum value in the heatmap
+        min_index = np.unravel_index(np.argmin(heatmap), heatmap.shape)
+
+        # Extract the window around the minimum value
+        i_min = max(min_index[0] - window_size // 2, 0)
+        i_max = min(min_index[0] + window_size // 2 + 1, heatmap.shape[0])
+        j_min = max(min_index[1] - window_size // 2, 0)
+        j_max = min(min_index[1] + window_size // 2 + 1, heatmap.shape[1])
+
+        # Extract the local area around the minimum value
+        local_area = heatmap[i_min:i_max, j_min:j_max]
+
+        # Find the minimum value in the local area
+        local_min_index = np.unravel_index(np.argmin(local_area), local_area.shape)
+
+        # Calculate the global index of the maximum value
+        global_index = (local_min_index[0] + i_min, local_min_index[1] + j_min)        
+
+        # Normalize the (i, j) position to the range [-1, 1]
+        height, width = heatmap.shape
+        normalized_x = 2 * global_index[0] / (height - 1) - 1
+        normalized_y = 2 * global_index[1] / (width - 1) - 1
+
+        # DEBUG: Convert heatmap to rgb, resize it to 500x500, make max value 255 and min value 0 and display it with opencv
+        # Normalize the heatmap to the range [0, 1]
+        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap) + 1e-8)
+
+        # Resize heatmap to 500x500
+        heatmap_resized = cv2.resize(heatmap, (500, 500), interpolation=cv2.INTER_NEAREST)
+
+        # Copy heatmap
+        copy_heatmap = copy.deepcopy(heatmap_resized)
+
+        # Change
+        copy_heatmap[global_index[0],global_index[1]] = 1
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Original Grayscale Heatmap", copy_heatmap)
+        cv2.waitKey(1)
+
+        # Convert heatmap to RGB
+        heatmap_rgb = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+        # Get max value of heatmap and min value of heatmap
+        max_pos = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+        min_pos = np.unravel_index(np.argmin(heatmap), heatmap.shape)
+
+        # Make pixel at max_value black and pixel at min_value white
+        heatmap_rgb[max_pos[0], max_pos[1], :] = [0, 0, 0]  # black
+        heatmap_rgb[min_pos[0], min_pos[1], :] = [255, 255, 255]  # white
+
+        # Resize heatmap to 500x500
+        heatmap_rgb_resized = cv2.resize(heatmap_rgb, (500, 500), interpolation=cv2.INTER_NEAREST)
+
+        # Display the heatmap with OpenCV
+        cv2.imshow("Spectrum Heatmap", heatmap_rgb_resized)
+        cv2.waitKey(1)        
+
+        return np.array([normalized_x, normalized_y]), global_index
+
     
