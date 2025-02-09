@@ -11,7 +11,7 @@ defaults:
   - _self_
 
 # Switch model type
-model_type: CNN # Possible model types: FCN, CNN, ResNet
+model_type: ResNet # Possible model types: FCN, CNN, ResNet
 
 # Switch log level
 log_level: DEBUG # DEBUG, INFO, WARNING, ERROR

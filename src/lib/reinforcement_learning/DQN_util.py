@@ -265,6 +265,10 @@ class DQNAgent_ResNet:
         self.agent_actions = []
         self.supervisor_actions = []
 
+        # Check if input shape is divisible by 8
+        if self.input_shape[0] % 8 != 0 or self.input_shape[1] % 8 != 0:
+            raise ValueError("Input shape must be divisible by 8 for ResNet model")
+
         # Set start episode to 0 if no weights are loaded
         self.start_episode = 0
 
