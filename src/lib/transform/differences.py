@@ -1,7 +1,6 @@
 import numpy as np
 from transform.affine import Affine
 
-
 def rotation_to_line_difference(rotation: np.array, line_point_a, line_point_b):
     # Assume we search for the x-axis' rotational error to the line
     x_axis = Affine(rotation=rotation) * Affine(translation=(1, 0, 0))

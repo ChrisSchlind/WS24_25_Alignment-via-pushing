@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 import numpy as np
 from transform.affine import Affine
 
-
 def is_overlapping(pose, min_dist, objects):
     for o in objects:
         o_pose = Affine.from_matrix(o.pose)
@@ -11,7 +10,6 @@ def is_overlapping(pose, min_dist, objects):
         if overlap:
             return True
     return False
-
 
 @dataclass
 class SceneObject:

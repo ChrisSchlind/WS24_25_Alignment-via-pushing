@@ -4,7 +4,6 @@ from contextlib import contextmanager
 import pybullet as p
 from pybullet_utils.bullet_client import BulletClient
 
-
 @contextmanager
 def stdout_redirected(to=os.devnull):
     fd = sys.stdout.fileno()

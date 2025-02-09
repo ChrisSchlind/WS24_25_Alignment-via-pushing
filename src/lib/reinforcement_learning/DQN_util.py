@@ -2,7 +2,6 @@ import numpy as np
 import os
 import tensorflow as tf
 from collections import deque
-import logging
 import random
 import cv2
 import copy

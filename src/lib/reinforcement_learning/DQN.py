@@ -1,6 +1,5 @@
 import tensorflow as tf
 from .resnet import ResNet
-
 from loguru import logger
 
 class ConvDQN_ResNet(tf.keras.Model):

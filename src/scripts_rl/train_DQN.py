@@ -7,7 +7,6 @@ from loguru import logger
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 from bullet_env.util import setup_bullet_client
-
 from util.plot_util import plot_action_history, plot_rewards_epsilons, plot_losses_epsilons  # Add this import
        
 @hydra.main(version_base=None, config_path="config", config_name="train_DQN")

@@ -4,10 +4,8 @@ import random
 import numpy as np
 from dataclasses import dataclass, field
 import json
-
 from manipulation.simulation_object import SceneObject, is_overlapping
 from transform.affine import Affine
-
 
 class PushObjectFactory:
     def __init__(self, objects_root: str, object_types: Union[List[str], None] = None):

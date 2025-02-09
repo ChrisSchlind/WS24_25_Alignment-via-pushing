@@ -2,7 +2,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 from scipy import interpolate
 
-
 class Affine:
     """
     Class for representing and dealing with affine transformations.
