@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import json
 from manipulation.simulation_object import SceneObject, is_overlapping
 from transform.affine import Affine
+from loguru import logger
 
 class PushObjectFactory:
     def __init__(self, objects_root: str, object_types: Union[List[str], None] = None):
@@ -47,7 +48,6 @@ class PushObjectFactory:
 
         return PushObject(**kwargs)
 
-
 @dataclass
 class PushObject(SceneObject):
     """
@@ -68,7 +68,6 @@ class PushObject(SceneObject):
                 if segmentation_mask[i, j] == self.unique_id:
                     mask[i, j] = 1
         return mask
-
 
 class PushAreaFactory:
     def __init__(self, areas_root: str, areas_types: Union[List[str], None] = None):
@@ -99,7 +98,6 @@ class PushAreaFactory:
         kwargs["color"] = color
 
         return PushArea(**kwargs)
-
 
 @dataclass
 class PushArea(SceneObject):
@@ -132,14 +130,14 @@ class PushTaskFactory:
         obj = self.push_object_factory.create_push_object(object_type)
 
         # Find non-overlapping pose
-        pose = self.get_non_overlapping_pose(obj.min_dist, added_objects)
+        pose, found_pose = self.get_non_overlapping_pose(obj.min_dist, added_objects)
 
         # Apply offset and set pose
         obj.pose = obj.offset @ pose.matrix
         obj.unique_id = self._get_unique_id()
         obj.object_id = self._get_object_id()
 
-        return obj
+        return obj, found_pose
 
     def generate_push_area(self, object_type, added_areas, push_object):
         # Create area with matching color
@@ -147,14 +145,14 @@ class PushTaskFactory:
 
         # Find non-overlapping pose
         areas_and_objects = added_areas + [push_object]
-        pose = self.get_non_overlapping_pose(area.min_dist, areas_and_objects)
+        pose, found_pose = self.get_non_overlapping_pose(area.min_dist, areas_and_objects)
 
         # Apply offset and set pose
         area.pose = area.offset @ pose.matrix
         area.unique_id = self._get_unique_id()
         area.area_id = self._get_area_id()
 
-        return area
+        return area, found_pose
 
     def _get_unique_id(self):
         self.unique_id_counter += 1
@@ -172,19 +170,30 @@ class PushTaskFactory:
         self._reset_counters()
         n_objects = np.random.randint(self.min_n_objects, self.n_objects + 1)
         object_types = random.choices(self.push_object_factory.object_types, k=n_objects)
+        
         push_objects = []
         push_areas = []
         for object_type in object_types:
-            push_object = self.generate_push_object(object_type, push_objects)
-            push_objects.append(push_object)
-            push_area = self.generate_push_area(object_type, push_areas, push_object)
-            push_areas.append(push_area)
+            found_pose_obj = False
+            found_pose_area = False
+            push_object, found_pose_obj = self.generate_push_object(object_type, push_objects)
+            push_area, found_pose_area = self.generate_push_area(object_type, push_areas, push_object)
+            if found_pose_obj and found_pose_area:
+                push_objects.append(push_object)
+                push_areas.append(push_area)
+
+        # Check if lists are empty
+        if not push_objects or not push_areas:
+            raise RuntimeError("Could not place a single object or area.")
+        
+        logger.info(f"Generated {len(push_objects)}/{n_objects} objects and {len(push_areas)}/{n_objects} areas.")
 
         return PushTask(push_objects, push_areas)
 
     def get_non_overlapping_pose(self, min_dist, objects):
         counter = 0
         overlapping = True
+        found_pose = True
         new_t_bounds = np.array(self.t_bounds)
         new_t_bounds[:2, 0] = new_t_bounds[:2, 0] + min_dist
         new_t_bounds[:2, 1] = new_t_bounds[:2, 1] - min_dist
@@ -193,9 +202,13 @@ class PushTaskFactory:
             overlapping = is_overlapping(random_pose, min_dist, objects)
 
             if counter > 1000:
-                raise RuntimeError("Could not find non-overlapping pose")
+                logger.info("Could not find non-overlapping pose.")
+                found_pose = False
+                return random_pose, found_pose
+
             counter += 1
-        return random_pose
+
+        return random_pose, found_pose
 
 
 class PushTask:

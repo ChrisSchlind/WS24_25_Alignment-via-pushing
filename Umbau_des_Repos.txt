@@ -3,7 +3,8 @@ X- Alle objekte in den ordner "objects
 X- "objects_warehouse" und "objects_NOT_WORKING" löschen
 - Aufrufen der gewünschten Objekte über liste in config file
 - Alle Objekte und areas größer machen (einheitliche größe und ein bisschen kleiner als die aktuell großen), min dist passend ändern
-    --> overlapping pose fixen, try-catch und dann halt anzahl objekte reduzieren, falls es nicht geht --> rauslöschen aus object_types liste!!!
+X    --> overlapping pose fixen, try-catch und dann halt anzahl objekte reduzieren, falls es nicht geht --> rauslöschen aus object_types liste!!!
+- Alle Objekte und Areas durchgehen und urdf checken, vor allem auf min dist
 
 src/Lib:
 X - Ordner "transporter_network" umbennen zu "reinforcement_learning" --> in den config files ändern
