@@ -1,11 +1,7 @@
 *.pyc
-data/models/
 
 src/scripts_rl/models/dqn/
 src/scripts_rl/models/plot/
-
-# Image
-*.png
 
 # CSV
 *.csv

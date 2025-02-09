@@ -8,14 +8,14 @@ epsilon_min: 0.1
 supervisor_epsilon: 0.5
 
 # Pretrained weights
-weights_dir: "models/best/ResNet"
+weights_dir: "models/best/ResNet" # needs to be manually created
 weights_path: "" # example: "dqn_ResNet_episode_1000"
 use_pretrained_best_model: False
 auto_set_epsilon: False
 
 # Model parameters
 action_dim: 2
-input_shape: [88, 88, 7]
+input_shape: [88, 88, 7] # 7: 3 RGB, 3 depth, 1 one-hot-encoded TCP
 learning_rate: 0.00025
 
 # Q-Value calculation

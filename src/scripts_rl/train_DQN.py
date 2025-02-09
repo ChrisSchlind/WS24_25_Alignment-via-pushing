@@ -69,10 +69,12 @@ def main(cfg: DictConfig) -> None:
     # Check if the model directory exists, if not create it
     if not os.path.exists(cfg.model_dir):
         os.makedirs(cfg.model_dir)
+        logger.info(f"Model directory created at {cfg.model_dir}")
 
     # Check if the plot directory exists, if not create it
     if not os.path.exists(cfg.plot_dir):
         os.makedirs(cfg.plot_dir)
+        logger.info(f"Plot directory created at {cfg.plot_dir}")
 
     # Training loop
     for episode in range(cfg.num_episodes):
@@ -118,16 +120,16 @@ def main(cfg: DictConfig) -> None:
 
             if done:
                 logger.debug(f"Episode {episode} completed at step {step}. Reward = {episode_reward}")
-                logger.error(f"Episode {episode} completed at step {step}. Reward = {episode_reward}")
+                logger.warning(f"Episode {episode} completed at step {step}. Reward = {episode_reward}")
                 break
 
             if failed:
                 logger.debug(f"Episode {episode} failed at step {step} because all objects are outside of workspace.")
-                logger.error(f"Episode {episode} failed at step {step} because all objects are outside of workspace.")
+                logger.warning(f"Episode {episode} failed at step {step} because all objects are outside of workspace.")
                 break
 
         logger.debug(f"Episode {episode}: Reward = {episode_reward}")
-        logger.error(f"Episode {episode}: Reward = {episode_reward}")
+        logger.warning(f"Episode {episode}: Reward = {episode_reward}")
 
         # Save rewards and epsilon for plotting
         rewards.append(episode_reward)
@@ -151,7 +153,7 @@ def main(cfg: DictConfig) -> None:
 
     pushing_env.close()
     logger.debug("Training completed.")
-    logger.error("Training completed.")
+    logger.warning("Training completed.")
 
 if __name__ == "__main__":
     main()

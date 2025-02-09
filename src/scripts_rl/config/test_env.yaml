@@ -11,3 +11,7 @@ render: true
 
 # Camera parameters
 projection_resolution: [512, 512]
+
+# Set training to False to play the game
+pushing_env:
+  training: False # do not change!

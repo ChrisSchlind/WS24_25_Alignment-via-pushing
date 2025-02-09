@@ -8,11 +8,8 @@ class ConvDQN_ResNet(tf.keras.Model):
         # Initializer for the weights
         self.initializer = initializer
 
-        # ResNet Block 1: 
-        self.resnet_block_1 = ResNet(kernel_size=(3, 3), output_depth=64, include_batchnorm=True)
-
-        # ResNet Block 2: 
-        self.resnet_block_2 = ResNet(kernel_size=(3, 3), output_depth=256, include_batchnorm=True)        
+        # ResNet Block: 
+        self.resnet_block = ResNet(kernel_size=(3, 3), output_depth=64, include_batchnorm=True)       
 
         # Conv2D layer for the heatmap output (H, W, 1)
         self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', kernel_initializer=self.initializer)
@@ -22,11 +19,8 @@ class ConvDQN_ResNet(tf.keras.Model):
 
         logger.debug(f"Input shape: {inputs.shape}")
 
-        # First ResNet-Block
-        x = self.resnet_block_1(inputs)
-
-        # Second ResNet-Block
-        x = self.resnet_block_2(x)
+        # ResNet-Block
+        x = self.resnet_block(inputs)
      
         # Final heatmap (H, W, 1)
         x = self.heatmap(x)
