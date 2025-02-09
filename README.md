@@ -1,8 +1,8 @@
-# Robot programming HKA WS 2024/25
+# Robot programming HKA WS 2024/25 - Alignment via Pushing
 
-This repository contains the code for the robot programming course (the policy learning part) at the University of Applied Sciences Karlsruhe.
+This repository contains the code for the robot programming task *Alignment via Pushing* at the University of Applied Sciences Karlsruhe.
 
-We will use and update this repository throughout the course.
+State: 2025-02-09
 
 ## Quick start
 
