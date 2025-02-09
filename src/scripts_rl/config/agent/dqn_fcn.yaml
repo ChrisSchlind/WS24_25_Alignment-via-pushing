@@ -9,7 +9,7 @@ supervisor_epsilon: 0.5
 
 # Pretrained weights
 weights_dir: "models/best/FCN" # needs to be manually created
-weights_path: "" # example: "dqn_FCN_episode_1000"
+weights_path: "" # example: "dqn_FCN_episode_1000" without .index or .data-00000-of-00001
 use_pretrained_best_model: False
 auto_set_epsilon: False
 

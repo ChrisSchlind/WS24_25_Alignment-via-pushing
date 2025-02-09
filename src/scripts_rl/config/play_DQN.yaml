@@ -11,7 +11,7 @@ defaults:
 # Switch model type
 model_type: CNN # Possible model types: FCN, CNN, ResNet
 weights_dir: "models/best/CNN"
-weights_path: "dqn_CNN_episode_850" # example: "dqn_CNN_episode_1000" 
+weights_path: "add_your_own_weights" # example: "dqn_CNN_episode_1000" without .index or .data-00000-of-00001
 
 # Environment parameters
 debug: true
