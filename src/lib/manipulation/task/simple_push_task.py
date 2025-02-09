@@ -186,7 +186,7 @@ class PushTaskFactory:
         if not push_objects or not push_areas:
             raise RuntimeError("Could not place a single object or area.")
         
-        logger.info(f"Generated {len(push_objects)}/{n_objects} objects and {len(push_areas)}/{n_objects} areas.")
+        logger.debug(f"Generated {len(push_objects)}/{n_objects} objects and {len(push_areas)}/{n_objects} areas.")
 
         return PushTask(push_objects, push_areas)
 

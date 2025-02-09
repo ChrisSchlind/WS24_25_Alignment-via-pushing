@@ -22,7 +22,7 @@ X    --> netztyp in weights file und plots machen
 X- Ordner "util" in lib erzeugen
 X    --> alle _util.py dort hinverschieben --> passende config files erzeugen
 
-==> durchgehen ob einzelne Funktionen irgendwo rumfliegen
+X ==> durchgehen ob einzelne Funktionen irgendwo rumfliegen
 
 Src/scripts_rl:
 X - plot functions aus "train_DQN.py" in eigene util file --> "plot_util.py" und in lib verschieben
@@ -40,14 +40,14 @@ X - plots mit flag in config file abfragen was man haben will
 
 
 
-- Logger Status konsitent machen über alle Funktione etc., sodass man über Flag in YAML Modus ändern kann:
-    INFO: Informationen z.B. Episoden-Nummer im Training --> wie YOLO Trainieren
+X- Logger Status konsitent machen über alle Funktione etc., sodass man über Flag in YAML Modus ändern kann:
+X    INFO: Informationen z.B. Episoden-Nummer im Training --> wie YOLO Trainieren
 
 
 
-- UI für User während Training --> vgl. YOLO
+X- UI für User während Training --> vgl. YOLO
 
-==> imports durchgehen und alles löschen was man nicht braucht
+X==> imports durchgehen und alles löschen was man nicht braucht
     
 
 Github:

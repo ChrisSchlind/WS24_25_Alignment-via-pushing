@@ -14,7 +14,7 @@ defaults:
 model_type: ResNet # Possible model types: FCN, CNN, ResNet
 
 # Switch log level
-log_level: DEBUG # DEBUG, INFO, WARNING, ERROR
+log_level: INFO # DEBUG, INFO, WARNING, ERROR
 
 # Environment parameters
 debug: true
