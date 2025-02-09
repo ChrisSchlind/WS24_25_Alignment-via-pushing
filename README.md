@@ -45,7 +45,7 @@ This script is used to test the environment setup and visualize the observations
 This script allows manual control of the robot in the pushing environment. It provides a simple interface to move the robot using keyboard inputs and visualize the camera feed. It can also run in an automatic mode where the robot performs predefined actions.
 
 ### play_DQN.py
-This script is used to run a trained DQN agent in the pushing environment. It loads the trained model, runs test episodes, and logs the rewards. It can also render the environment to visualize the agent's performance.
+This script is used to run a trained DQN agent in the pushing environment. It loads the trained model and runs test episodes. It can also render the environment to visualize the agent's performance.
 
 ## Changing Parameters
 
