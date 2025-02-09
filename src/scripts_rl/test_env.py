@@ -6,7 +6,7 @@ from omegaconf import DictConfig
 from hydra.utils import instantiate
 import copy
 import cv2
-from bullet_env.util import setup_bullet_client, stdout_redirected
+from bullet_env.util import setup_bullet_client
 from util.convert_util import convert_to_orthographic, display_orthographic
 
 @hydra.main(version_base=None, config_path="config", config_name="test_env")
@@ -41,7 +41,8 @@ def main(cfg: DictConfig) -> None:
     pushing_env = instantiate(cfg.pushing_env, bullet_client=bullet_client, robot=robot, task_factory=task_factory, teletentric_camera=teletentric_camera)
     logger.info("Environment instantiation completed.")
 
-    if(cfg.debug): logger.info("Instantiation completed.")
+    if(cfg.debug):
+        logger.info("Instantiation completed.")
 
     for _ in range(10):
         robot.home()
@@ -84,9 +85,6 @@ def main(cfg: DictConfig) -> None:
         task.clean(pushing_env)
 
     pushing_env.close()
-
-    with stdout_redirected():
-        bullet_client.disconnect()
 
 if __name__ == "__main__":
     main()

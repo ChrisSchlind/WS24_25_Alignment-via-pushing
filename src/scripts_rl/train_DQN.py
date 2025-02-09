@@ -154,6 +154,5 @@ def main(cfg: DictConfig) -> None:
     logger.debug("Training completed.")
     logger.error("Training completed.")
 
-
 if __name__ == "__main__":
     main()

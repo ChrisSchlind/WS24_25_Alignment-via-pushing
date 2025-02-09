@@ -2,22 +2,15 @@ defaults:
   - defaults
   - task_factory: simple_push_task
   - camera_factory: static
-  - teletentric_camera: ../teletentric_camera_config
+  - teletentric_camera: ../camera_factory/teletentric_camera_config
   - _self_
 
+# Switch modes
 debug: true
 render: true
-auto_mode: false
 
+# Environment parameters
+auto_mode: false # False: manual mode with keyboard, True: auto mode with automatic movement from object to area
+
+# Camera parameters
 projection_resolution: [512, 512]
-
-gripper_offset:
-  translation: [0, 0, 0]
-  rotation: [3.14159265359, 0, 1.57079632679]
-
-fixed_z_height: 0.005
-
-workspace_bounds:
-  - [0.35, 0.85]
-  - [-0.25, 0.25]
-  - [-0.0125, 0.35]
