@@ -1,0 +1,41 @@
+defaults:
+  - defaults
+  - task_factory: simple_push_task
+  - camera_factory: static
+  - teletentric_camera: ../camera_factory/teletentric_camera_config
+  - agent_resnet: ../agent/dqn_resnet
+  - agent_fcn: ../agent/dqn_fcn
+  - agent_cnn: ../agent/dqn_cnn
+  - supervisor: dqn_supervisor
+  - replay_buffer: prio_replay_buffer
+  - _self_
+
+# Switch model type
+model_type: ResNet # Possible model types: FCN, CNN, ResNet
+
+# Switch log level
+log_level: DEBUG # DEBUG, INFO, WARNING, ERROR
+
+# Environment parameters
+debug: true
+render: true
+
+# Training parameters
+num_episodes: 5000
+max_steps_per_episode: 100
+batch_size: 16
+train_start_size: 5000
+window_size: 5 # needed for ResNet and FCN heatmaps
+
+# Model parameters
+target_update_freq: 100 # update the target model every n episodes
+save_freq: 10 # save the model every n episodes
+model_dir: "models/dqn"
+
+# Plotting parameters (reward and epsilon, losses and epsilon)
+plot_freq: 10 # plot every n episodes
+plot_dir: "models/plot"
+activate_action_history_plot: False  # requires a lot of memory and makes the training slower
+activate_rewards_epsilons_plot: True
+activate_losses_epsilons_plot: True
+

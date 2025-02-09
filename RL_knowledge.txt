@@ -1,0 +1,160 @@
+--------------------------------------------------------------------------------------------------------
+#                                     Aufgebautes Wissen zum RL
+--------------------------------------------------------------------------------------------------------
+
+1. Netz reagiert unfassbar sensibel auf zu hohe (positiv) und zu niedrige (negative) rewards
+    - Im Grunde alles was kleiner als -1 und größer als 1 ist hat erheblichen Einfluss auf das Netz
+    - Extrema machen das Netz instabil im Training
+    - In endlicher Trainingszeit "erholt" sich das Netz davon nicht mehr 
+    - Dies ist während des Trainings (schnell) sichtbar, wenn der Agent nur noch Actionen nahe bei -1 oder 1 schätzt bzw. nach unserer Normalisierung nah bei 0 oder 1
+    - Das Netz gibt quasi auf und "lernt", dass nichs tun immer noch im kumulativen Reward besser ist als etwas zu machen
+
+Lösung: Reward Normalisierung nach dem samplen aus dem Buffer innerhalb der Trainingsfunktion, Normalisierung im Bereich zwischen -1 und 1
+    ==> Hierdurch ist das Netz weniger anfällig auf Ausreißer in den Rewards
+    ==> Einstellung der passenden Rewards ist nicht mehr so kompliziert, da durch die Normalisierung dies wieder geglättet wieder
+    ==> Vorher war es quasi unmöglich ein gutes Mittelmaß an Rewards zu finden, welche nicht nach ca. 20 Epochen in einem Agenten, der nur noch -1 und 1 schätzt, endet.
+    ==> Einziges Problem ist, dass das Training hierdurch wahrscheinlich deutlich langsamer ist aber dafür stabiler bleibt
+
+2. Mehr Exploration zu Beginn ist zwingend notwendig, um genügend und vor allem verschiedene Traingsdaten im Buffer zu haben
+    - Ohne die Exploration zu Beginn bewegt sich der Roboter quasi nie und probiert nichts aus, 
+      Agent sieht und lernt nur das nichts tun schlecht ist, aber das es was besseres gibt sieht er nie
+    - Mittelmaß für die Dauer der Exploration muss noch gefunden werden
+    - Hier ist das Problem recht kompliziert mit verschiedensten Zuständen, weswegen mehr Exploration von Vorteil ist
+
+Lösung: Epsilon Annealing, um mit einem hohen Epsilon-Wert zu starten (0,5 bis 1), welcher dann nach jeden Trainingsschritt um einen Faktor (0,995 bis 0,99995) herabgesetzt wieder
+    ==> Viel Exploration zu Beginn
+    ==> Agent muss sich nicht auf seine Exploitation alleine verlassen
+    ==> Wechsel der beiden Zustände findet fließend statt
+
+3. Unausgeglichener Datensatz durch mehr Cases in welchen der Reward klein oder negativ ist im Vergleich zu hohen positiven Rewards
+    - Unter der These, dass die Rewards grundsätzlich halbwegs gut abbilden, was die Aufgabe ist, ist es erwartungsgemäßg, dass zu Beginn und in der Mitte 
+      die Summe an Negativbeispielen stochastisch kleiner als die der Positivbeispiele sein wieder
+    - Es ist wahrscheinlicher, dass in der Exploration etwas schlechtes als etwas gutes passiert
+    - Hierdurch ist der Datensatz im ReplayBuffer unausgeglichen, was das Training destabilisiert
+    - Resultat ist, dass der Agent schnell nur noch -1 bzw. 0 schätzt, da er mehr negative Fälle und damit negative Rewards gesehen hat
+    - Er lernt buchstäblich von Beginn an nie was eigentlich gemacht werden muss
+
+Lösung: PrioritizedReplayBuffer, um beim samplen häufiger "wichtige" Erkenntnisse zu zeigen
+    ==> durch die interne Priorisierung, werden jegliche Rewards häufiger beim samplen ausgewählt, die einen hohen Wert haben (sowohl positiv als auch negativ)
+    ==> Hierdurch soll der Agent lernen, was richtig und was falsch ist
+    ==> Aufgrund des unausgeglichenen Datensatzes bekommen positive Rewards noch eine minimal höhere Priorisierung, um dem Netz für das Training häufiger gezeigt zu werden
+    ==> "Unnötige" Aktionen, die keinen nennenswerten Reward haben werden häufiger gesampelt
+    ==> Macht Training schneller und effektiver
+
+Lösung: Mehr Objekte im Task erzeugen, dass sowohl während des rumprobierens in der Exploration als auch in der späteren Exploitation gelernt wird was wichtig ist
+    ==> Maximale Anzahl an Objekten vergrößeren, Aktuell scheint jedoch 5 das Maximum für eine robuste Taskerstellung zu sein, da bei mehr das Training abbricht,
+        da keine Random Pose für alle Objekte gefunden werden kann
+    ==> Minimale Anzahl wird auf 4 gesetzt, damit möglichst hoch, aber trotzdem noch ein Unterschied zu Maximum, damit Netz hoffentlich generalisierender lernt
+    ==> Durch mehr Objekte "passiert" auch mal häufiger etwas, wodurch der Datensatz generell mit mehr sinnvollen Daten gefüllt wird
+
+Lösung: Indirekt wird es durch die Reward Normalisierung möglich, dass positve Dinge mit einem überproportional hohen Rewards belohnt werden, ohne eine Instabilität 
+        des Trainings zu riskieren, wodurch es um ein vielfaches leichter wird zu trainieren
+
+4. Loss Berechnung:
+    - Loss Berechnung bei den Heatmaps funktioniert nicht, indem in den target heatmaps an der Stelle der Actions (in Pixelkoordianten) die berechneten target_values gesetzt werden und dann die kompletten Heatmaps
+      von targets und values für die Loss berechnung verwendet werden (War so ein Vorschlag von ChatGPT)
+    - TF kann zwar ein Loss berechnen (Tensor mit der Größe der Heatmap), aber wie genau der interpretierbar sein soll ist fraglich und die darauffolgenden Trainings haben gezeigt, dass der Agent nichts lernt
+
+Lösung: target_values und Pixelwerte aus values für Loss verwenden
+    - Stattdessen werden nun die b (batchsize) target_values mit den korrenspondierenden Pixelwerten (berechnet aus den Actions) aus den values heatmaps verwendet
+    - So liegen zwei Tensoren mit der Größe b (hier 16) vor und als Loss kommt ebenfalls ein Tensor mit der Größe b raus, welcher dann weiter gewichtet wird über die b weights aus dem Replay-Buffer
+    - In der Fassung sieht es aus als könnte das Netz trainieren
+    - Hier werden die target heatmaps für die aktuellen states jedoch nicht weiter verwendet --> so richtig?
+
+5. ResNet erzeugt Fragmente am Rand:
+    - Zusatz: Damit Zero-Padding bei ResNet funktioniert muss die Input shape durch 8 teilbar sein --> Daher Wechsel von 84x84 auf 88x88
+    - Die ausgegebenen Heatmaps zeigen am Rand sehr hohe und niedrige Pixelwerte, welche dann als Aktion gewählt werden
+
+Lösung: Cropping der Heatmap
+    - Initial wurde durch eine extra Conv.-Layer nach dem letzten ResNet-Block oder der Resize-Funktion von TF versucht, diese Fragmente zu entfernen
+    - Es zeigt sich aber, dass diese entweder gar nicht oder nur sehr sporadisch verschwinden
+    - Als robustere Methode hat sich erwiesen, einfach die ersten und letzten beiden Zeilen und Spalten zu entfernen (Cropping) und damit die Output Shape auf 84x84 zu reduzieren
+    - Nun enthalten die Heatmaps diese fehlerhafte Pixelreihe am Rand quasi nicht mehr
+    - Der tatsächliche Action-Space sollte hierdurch ebenfalls nicht eingeschränkt werden, da die finale Bewegung des Roboters auf Basis der movement_bounds bestimmt wirde
+
+6. Inhalt des ReplayBuffer wird mit der Zeit ersetzt, da dieser eine begrenzte Länge hat
+    - Nach 10.000 Steps wird Inhalt mit neuem Step ersetzt
+    - Zu Beginn ist Inhalt primär aus der Explorationsphase und damit wertvoll für das Training, je mehr Episoden trainiert wird, desto kleiner wird der Anteil an Informationen aus der Explorationsphase
+    - Problem besteht nun dabei, wenn der Agent selbst keine hilfreichen Trainingsdaten mehr erzeugt und der ReplayBuffer irgendwann nur aus "unnötigen" Schritt aus der Exploitation besteht
+    - Ab diesem Punkt macht es nicht wirklich Sinn weiter zu trainieren, da er keine Basis hat auf der sinnvoll trainiert werden kann --> Catastrophical Forgetting
+
+Lösung:
+    - train_start_size auf einen hohen Wert stellen (z.B. 5000), damit dieser vor dem Training und dem Umstieg von Exploration auf Exploitation mehr gutes Wissen im ReplayBuffer zur Verfügung hat
+    - Hohes initiales Epsilon (0.8) mit Epsilon decay nahe 1 (0.99995) --> Unterschied Graph Test 16 und zu 18
+    - Hierdurch enthält ReplayBuffer schon sinnvolle Daten und der Wechsel zur Eigenständigkeit des Agenten geschieht langsam --> er hat länger noch "Stützräder"
+    - Agent ist dann in der Lage während der Exploration den ReplayBuffer mit eigenen besseren Infos zu füllen, wobei der Anteil zu Beginn keinen zu großen Einfluss hat, da
+      bereits ReplayBuffer gut gefüllt ist mit sinnvollen Daten (Verteilung im samplen wird besser)
+    - ReplayBuffer auf 20.000 erweitert
+    - Gefüllter ReplayBuffer vor dem Start des Trainings muss "Proviant" sein, für das Training und den Wechsel von Exploration zu Exploitation und muss dem Agenten bis zur Autarkie reichen
+        ==> "Wenn ihm der ReplayBuffer ausgeht, bevor er es gelernt hat, dann kann er es nie lernen!"
+    - train_start_size auf 10.000 (Hälfte des ReplayBuffer)
+    ==> Vergleich zwischen verschiedenen Tetsreihen zeigt, dass das Auffüllen des ReplayBuffer vor dem eigentlichen Beginn des Trainings sehr sinnvoll ist und im Grunde das eigentlich Training überhaupt erst stabil möglich macht
+
+7. Fragmentpixel am Rand der Heatmaps:
+    - Überlegung, ob durch Zero-Padding am Rand falsch gefiltert wird
+    - Hiedurch könnten hohe Frequenzen vorkommen, die beim Falten verstärkt werden
+
+Lösung: Heatmap größer als Input und dann Croppen auf 84x84
+    - Image mit Inputgröße von 88x88 und dann durch Netz schleusen
+    - Im letzten Step Bild um 2 Pixel an allen Kanten croppen auf 84x84
+    - 2 Pixel müssten genügen, da bei Kernel_size von 3 und Zero-Padding die äußeren 2 Pixel hiervon beeinflusst werden
+    ==> funktioniert in den ersten Tests und auch für langfristige Tests (> 1000 Episoden)
+
+8. Training nicht stabil:
+    - Verschiedenste Testreihen haben gezeigt, dass kein Training möglich war
+
+Lösung:
+    - ReplayBuffer viel größer machen und zu Beginn des Trainings durch Supervisor und Random füllen bevor eigentliches Training beginnt
+    - Max. steps per episode sollte ca. 150% mal mehr sein, als die Anzahl an steps die man manuell/per Hand braucht um eine vergleichbare Aufgabe zu lösen --> jegliche Schritte danach bringen für das Training keinen großen Mehrwert
+    - Kleine Zahlen an max. steps per epsiode helfen stark und bringt Vorteil beim Training
+
+--------------------------------------------------------------------------------------------------------
+#                                   Grundlegende Erkenntnisse:
+--------------------------------------------------------------------------------------------------------
+
+    - Liegen die Aktionen des Agenten über einen längeren Zeitraum (5-10 Epochen) nur noch bei -1 und 1 bzw. 0 und 1, dann kann das Training abgebrochen werden
+    - Ziel ist es, dass im Übergang zwischen hoher Exploration und Exploitation soll das Netz unterschiedliche Werte schätzen und selbst rumprobieren
+    - Optimal sind hierbei Werte, welche nahe bei 0 bzw. 0.5 liegen, da das Netz bzw. der Agent durch die Rewards noch nicht drastisch in eine Richtung "überkonvergiert" ist
+    - Auf Basis von diesem Punkt kann tatsächliches lernen stattfinden
+    - Durch hohe Exploration zu Beginn mit zufälligen Bewegungen passiert es häufig, dass Objekte vom Tisch geworfen werden, wodurch es sehr hohe negative Rewards gibt,
+      aufgrund der Reward Normalisierung haben diese jedoch keinen größeren Einfluss auf das Netz und machen das Training hierdurch instabil
+    - Durch PTP-Bewegung fliegt der Zylinder bei großen Bewegungen von einer Ecke in die andere auch gerne mal über die Objekte, was eigentlich unvorteilhaft ist;
+      es könnte jedoch sein, dass das Netz das lernt und damit umgeht durch z. B. Kleine Bewegungen, wenn ein Objekt verschoben werden soll
+    - Je länger das Training, desto stärker wird sichtbar wohin das Netz konvergiert. Hierbei gibt es drei Fälle:
+        1. Actions liegen nahe bei 0 oder sind 0: Netz hat keine Policy gefunden, nichts tun liefert tolerierbare Bestrafung, hoher kumulierter negativer Reward über alle Episoden
+        2. Actions liegen nahe bei 1 oder sind 1: Netz hat keine Policy gefunden, nichts tun liefert tolerierbare Bestrafung, hoher kumulierter positiver Reward über alle Episoden
+        3. Actions werden Situationsabhängig predictet: Netz hat eine verwendbare Policy gefunden, kumulierter Reward ist ausgeglichen und aussagekräftig für gewünschtes Ziel
+    - Reward_Range für die Reward Normalisierung im PrioritizedReplayBuffer hat direkten Einfluss auf Konvergenzrichtung und Geschwindigkeit der Aktionen des Agenten:
+        [-1.0, 1.0]: Netz konvergiert langsam Richtung -1, über 50 Epochen erreicht es ein Minimum bei den predicteten Actions von ca. -10
+        [-10.0, 10.0]: Netz konvergiert binnen einer Epochen Richtung -1, Über 10 Epochen erreicht es ein Minimum bei den predicteten Actions von ca. -10
+        [-0.1, 0.1]: Netz konvergiert (hoffentlich) vieler langsamer und kann vorher policy lernen --> aktuelle Einstellung
+        ==> Positiver Gesamtreward: Netz konvergiert gegen minus Unendlich
+        ==> Negativer Gesamtreward: Netz konvergiert gegen plus Unendlich
+    - Wenn eine Convolutional Layer Zero-Padding (padding='same') und einen größeren Stride als 1 (z.B. strides=(2,2)) verwendet, kann es passieren, dass sich die Größe des Tensors ändert, z.B. von 84x84 auf 88x88
+        ==> Dies kann speziell bei der Verwendung der ResNet-Funktion passieren, da dort mehrere Conv.-Layer einen Stride von 2 verwenden
+        ==> Mit einer neuen Conv.-Layer nach dem letzten ResNet-Block kann die Größe wieder auf die Eingangsgröße gebracht werden, Hierbei müssen aber kernel_size und stride genau ausgerechnet werden!!!
+        ==> Alternative wären Cropping/Clipping oder Resizen, aber in beiden Fällen würde man Informationen am Rand verlieren, 
+            die zusätzlcihe Conv.-Schicht erhält diese Informationen und kann darüber hinaus weitere Schwerpunkte legen, nur das Training wird hierdurch länger
+
+        ==> Update nach 70 Epochen Training: Zusätzliche Conv.-Layer erzeugt komische Ein-Pixel-Dicke-Pixelreihe am Rand in welcher dann Max. und Min. Pixelwerte liegen und kein wirkliches Training stattfindet
+        ==> Wechsel auf Resize Funktion nach den ResNet-Blöcken zeigt bereits nach unter 10 Episoden diese Fragmente nicht mehr und erstmalig sind Cluster bzw. ROI in der Heatmap vom neuen ResNet-Netz sichtbar
+        ==> Wahrscheinlich wäre dieser Fehler auch durch sehr langes Training mit der zusätzlichen Conv.-Layer wegtrainiert werden können
+
+    - Rewards schwierig einzustellen, da man schnell im subraum der aufgabe lokale minimas findet, anstatt die Aufgabe zu lösen und nur dafür einen reward zu get_object_and_area_with_same_id
+    - Implizit bedeutet, dass die Train function (Stand: 24.01.2025) funktioniert mit FCN ConvDQN hat statt ResNet, weil man aktionen des agenten aus rewardset ableiten kann oder versteht 
+    - Aus Heatmap globale Minimas als Pixel für die Aktion wählen anstatt globale Maximas (funktioniert irgendwie besser)
+    - Netz ohne tanh erlaubt längeres Training ohne clipping
+    - In heightmap TCP dunkler machen (also von 0.0 auf 0.11), damit prio auf objekt liegt
+
+Muss noch bestätigt werden:
+    - Im aktuellen Training ist der Agent übergegangen mehr selbst zu machen und es fällt auf, dass dieser versucht Areas zu verschieben, anstatt die Objekte
+    Frage: Sind die Tiefenbilder richtig normiert, liegen diese im selben Bereich wie die RGB Bilder?
+    Frage: Muss der Zylinder/das Werkzeug ebenfalls noch in das Tiefenbild geplottet werden für ein besseres Training?
+    Frage: Lernt der Agent was von beiden von Bedeutung ist?
+
+
+--------------------------------------------------------------------------------------------------------
+#                                   Erkenntnisse aus dem letzten Test:
+--------------------------------------------------------------------------------------------------------
+
+- 2 Modelle (model und target_model) müssen geladen werden in die Grafikkarte, weswegen es schnell zu Problemen und Limitierungen in der Größe des Netzes kommen kann (3 Conv und 3 FC ist aktuelles Maximum)

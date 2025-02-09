@@ -2,8 +2,12 @@ defaults:
   - defaults
   - task_factory: simple_push_task
   - camera_factory: static
+  - teletentric_camera: ../camera_factory/teletentric_camera_config
   - _self_
 
+# Switch modes
 debug: true
 render: true
+
+# Camera parameters
 projection_resolution: [512, 512]

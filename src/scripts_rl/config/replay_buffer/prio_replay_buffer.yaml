@@ -1,0 +1,7 @@
+_target_: reinforcement_learning.DQN_util.PrioritizedReplayBuffer
+
+buffer_size: 50000
+alpha: 0.6
+initial_loss: 100.0
+beta: 0.4
+reward_range: [-1.0, 1.0]

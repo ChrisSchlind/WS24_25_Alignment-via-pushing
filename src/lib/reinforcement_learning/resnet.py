@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-
 # TODO: check with dilation?
 class IdentityBlock(tf.keras.layers.Layer):
     def __init__(self, kernel_size=(3, 3), filters=64, include_batchnorm=False, activation=True,

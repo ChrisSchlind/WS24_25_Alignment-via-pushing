@@ -1,7 +1,6 @@
 import numpy as np
 import cv2
 
-
 def create_pointcloud(rgb, depth, intrinsics):
     """Creates a pointcloud from RGB-D image and camera intrinsics."""
     height, width = depth.shape

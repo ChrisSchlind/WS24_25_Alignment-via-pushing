@@ -1,5 +1,6 @@
 {
   "min_dist": 0.057,
+  "sym_axis": 2,
   "offset": {
     "translation": [
       0.0,
@@ -11,5 +12,6 @@
       0.0,
       0.0
     ]
-  }
+  },
+  "static": false
 }

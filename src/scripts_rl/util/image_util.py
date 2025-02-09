@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from transform.affine import Affine
 
-
 def draw_pose(extrinsics, pose, intrinsics, rgb, length=0.1, thickness=6):
     camera_pose = Affine.from_matrix(extrinsics)
     pose_affine = Affine.from_matrix(pose)

@@ -1,0 +1,6 @@
+_target_: reinforcement_learning.DQN_util.DQNSupervisor
+
+min_obj_area_threshold: 0.04
+max_obj_area_threshold: 0.6
+extra_distance: 0.05
+sv_90deg_movement_threshold: 0.1

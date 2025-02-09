@@ -7,83 +7,60 @@ from hydra.utils import instantiate
 import copy
 import cv2
 import random
-import matplotlib.pyplot as plt  # Import matplotlib for plotting
-
-from bullet_env.util import setup_bullet_client, stdout_redirected
+from bullet_env.util import setup_bullet_client
 from transform.affine import Affine
-from convert_util import convert_to_orthographic, display_orthographic
-
-
-def draw_camera_direction(bullet_client, camera_pose, length=0.1):
-    """Draws a line indicating the camera's direction."""
-    start_pos = camera_pose.translation
-    end_pos = start_pos + camera_pose.rotation @ np.array([0, 0, length])
-    bullet_client.addUserDebugLine(start_pos, end_pos, [1, 0, 0], 2)
-
-
-def update_observation_window(camera_factory, teletentric_camera, cfg, bullet_client):
-    observations = [camera.get_observation() for camera in camera_factory.cameras]
-    # Display
-    image_copy = copy.deepcopy(observations[0]["rgb"])
-    # Convert to rgb for visualization
-    image_copy = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
-    cv2.imshow("rgb", image_copy)
-    depth_copy = copy.deepcopy(observations[0]["depth"])
-    # rescale for visualization
-    depth_copy = depth_copy / 2.0
-    cv2.imshow("depth", depth_copy)
-
-    # Convert observations to orthographic view
-    height_map, colormap = convert_to_orthographic(observations, cfg.workspace_bounds, cfg.projection_resolution)
-    # Display orthographic view
-    display_orthographic(height_map, colormap, cfg.workspace_bounds)
-
-    # Display teletentric camera view
-    teletentric_observation = teletentric_camera.get_observation()
-    teletentric_image_rgb = cv2.cvtColor(teletentric_observation["rgb"], cv2.COLOR_BGR2RGB)
-    cv2.imshow("teletentric_rgb", teletentric_image_rgb)
-
-    # Display height map from teletentric view
-    if "depth" in teletentric_observation:
-        teletentric_image_depth = teletentric_observation["depth"]
-        # Normalize depth for visualization
-        depth_normalized = cv2.normalize(teletentric_image_depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        # Apply histogram equalization for better contrast
-        depth_equalized = cv2.equalizeHist(depth_normalized)
-        cv2.imshow("teletentric_heightmap", depth_equalized)
-
+from util.game_util import draw_camera_direction, update_observation_window
 
 @hydra.main(version_base=None, config_path="config", config_name="play_game")
 def main(cfg: DictConfig) -> None:
     logger.remove()
     logger.add(sys.stderr, level=cfg.log_level)
 
+    # Setup bullet client
     bullet_client = setup_bullet_client(cfg.render)
+    logger.info("Bullet client setup completed.")
 
-    env = instantiate(cfg.env, bullet_client=bullet_client)
+    # Instantiate UR10Cell
     robot = instantiate(cfg.robot, bullet_client=bullet_client)
+    logger.info("Robot instantiation completed.")
+
+    # Create task factory and other components first
     t_bounds = copy.deepcopy(robot.workspace_bounds)
-    # the bounds for objects should be on the ground plane of the robots workspace
     t_bounds[2, 1] = t_bounds[2, 0]
     task_factory = instantiate(cfg.task_factory, t_bounds=t_bounds)
     t_center = np.mean(t_bounds, axis=1)
+    logger.info("Task factory instantiation completed.")
+
+    # Instantiate teletentric camera
+    teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center, robot=robot)
+    logger.info("Teletentric camera instantiation completed.")
+
+    # Instantiate camera factory
     camera_factory = instantiate(cfg.camera_factory, bullet_client=bullet_client, t_center=t_center)
-    teletentric_camera = instantiate(cfg.teletentric_camera, bullet_client=bullet_client, t_center=t_center)
+    logger.info("Camera factory instantiation completed.")
+
+    # Create environment with all components
+    pushing_env = instantiate(cfg.pushing_env, bullet_client=bullet_client, robot=robot, task_factory=task_factory, teletentric_camera=teletentric_camera)
+    logger.info("Environment instantiation completed.")
+    
+    # Display camera direction
     draw_camera_direction(bullet_client, teletentric_camera.pose)
 
-    logger.info("Instantiation completed.")
+    if cfg.debug:
+        logger.info("Instantiation completed.")
 
+    # Start the game
     robot.home()
     task = task_factory.create_task()
-    task.setup(env)
+    task.setup(pushing_env)
 
     # randomly select an object and area
     id = random.randint(0, len(task.push_objects) - 1)
     obj, area = task.get_object_and_area_with_same_id(id)
 
     # get the object and area poses
-    obj_pose = env.get_pose(obj.unique_id)
-    area_pose = env.get_pose(area.unique_id)
+    obj_pose = pushing_env.get_pose(obj.unique_id)
+    area_pose = pushing_env.get_pose(area.unique_id)
     if cfg.auto_mode:
         print("Object pose: ", obj_pose)
         print("Area pose: ", area_pose)
@@ -93,6 +70,8 @@ def main(cfg: DictConfig) -> None:
     start_pose = Affine(translation=[0.35, -0.25, cfg.fixed_z_height], rotation=[0, 0, 0, 1])
     start_pose = start_pose * gripper_offset
     robot.ptp(start_pose)
+
+    update_observation_window(camera_factory, teletentric_camera, cfg)
 
     # Define Manual control
     switch = {
@@ -121,7 +100,7 @@ def main(cfg: DictConfig) -> None:
     while key_pressed != ord("q"):
         # Continuously update the camera-feed. This is because robot mvt is not instantaneous
         while True:
-            update_observation_window(camera_factory, teletentric_camera, cfg, bullet_client)
+            update_observation_window(camera_factory, teletentric_camera, cfg)
             key_pressed = cv2.waitKey(1)
             if key_pressed != -1:
                 break
@@ -147,22 +126,26 @@ def main(cfg: DictConfig) -> None:
                 # Drive robot to fixed height and vertical stick alignment
                 new_pose = Affine(translation=[new_pose.translation[0], new_pose.translation[1], cfg.fixed_z_height]) * gripper_offset
 
-                logger.info(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
+                if cfg.debug:
+                    logger.info(f"Moving robot to {new_pose.translation}, {new_pose.rotation}")
                 robot.ptp(new_pose)
-                logger.info("Robot movement completed")
+                if cfg.debug:
+                    logger.info("Robot movement completed")
 
         if key_pressed == ord("r"):
             robot.ptp(start_pose)
-            task.reset_env(env)
-            logger.info("Environment reset completed")
+            task.reset_env(pushing_env)
+            if cfg.debug:
+                logger.info("Environment reset completed")
 
     # Shut down
-    task.clean(env)
-    logger.info("Task cleanup completed")
+    task.clean(pushing_env)
+    if cfg.debug:
+        logger.info("Task cleanup completed")
 
-    with stdout_redirected():
-        bullet_client.disconnect()
-
+    pushing_env.close()
+    if cfg.debug:
+        logger.info("Environment closed")
 
 if __name__ == "__main__":
     main()

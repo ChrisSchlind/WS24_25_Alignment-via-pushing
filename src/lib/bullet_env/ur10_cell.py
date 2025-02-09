@@ -1,18 +1,15 @@
 import copy
-
 import numpy as np
 import pybullet as p
 import pybullet_data
 from collections import namedtuple
 from loguru import logger
 from transform.affine import Affine
-
 from bullet_env.util import stdout_redirected
 
 JointInfo = namedtuple(
     "JointInfo", ["id", "name", "type", "damping", "friction", "lowerLimit", "upperLimit", "maxForce", "maxVelocity", "controllable"]
 )
-
 
 class UR10Cell:
     def __init__(self, bullet_client, urdf_path, workspace_bounds, joint_indices=(0, 6), ee_name="tcp_link"):
@@ -120,7 +117,6 @@ class UR10Cell:
         return Affine(position, orientation)
 
     def schedule_sequence(self, sequence):
-        logger.debug(f"Scheduling sequence with {len(sequence)} steps")
 
         self.current_sequence = [self.solve_position_ik(pose) for pose in sequence]
         self.target_joint_positions = self.current_sequence.pop(0)

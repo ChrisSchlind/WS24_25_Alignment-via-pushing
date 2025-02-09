@@ -1,7 +1,6 @@
 import numpy as np
 from transform.affine import Affine
 
-
 def sample_point_from_segment(point_a, point_b):
     r = np.random.uniform()
     relative_grasp_point = r * point_a.translation + (1 - r) * point_b.translation
