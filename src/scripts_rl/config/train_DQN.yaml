@@ -21,22 +21,21 @@ debug: true
 render: true
 
 # Training parameters
-num_envs: 1
-num_episodes: 5000    #10000
-max_steps_per_episode: 100 #200
+num_episodes: 5000
+max_steps_per_episode: 100
 batch_size: 16
-train_start_size: 5000 #10000
-window_size: 5 # only needed for ResNet and FCN
-target_update_freq: 100
-save_freq: 10
+train_start_size: 5000
+window_size: 5 # needed for ResNet and FCN heatmaps
 
 # Model parameters
+target_update_freq: 100 # update the target model every n episodes
+save_freq: 10 # save the model every n episodes
 model_dir: "models/dqn"
 
 # Plotting parameters (reward and epsilon, losses and epsilon)
-plot_freq: 10
+plot_freq: 10 # plot every n episodes
 plot_dir: "models/plot"
-activate_action_history_plot: False
+activate_action_history_plot: False  # requires a lot of memory and makes the training slower
 activate_rewards_epsilons_plot: True
 activate_losses_epsilons_plot: True
 

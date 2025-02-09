@@ -13,29 +13,29 @@ X    --> in dqnagent abfragen ob supervisor oder nicht (abhängig von netz), sup
 X    --> dqnagent unterschiedliche train functions in abhängigkeit des netzes
 X - Klassen aus train_DQN.py: ConvDQN aus den drei Iteration: ResNet, FCN V2, CNN V2 in ein lib python file: lib/reinforcement_learning/ConvDQN.py und dort halt Klassen richtig benennen
 X    --> für ResNet checken, ob input_shape durch 8 teilbar
-    --> laden der Gewichte mit Zusatzfunktionen ausstatten, damit nur die passenden Gewichte für das jeweilige Netz geladen werden können sonst User Error message
-    --> choose_action und choose_train function im dqn agenten und damit in train_dqn nur eine funktion die aufgerufen wird und logik passiert direkt in der klasse
-    --> init von dqnAgent clean machen indem load_weights als funktion und initialize convdqn als funktion
-    --> action_dim und input_shape je netz in config definieren
-    --> netztyp in weights file und plots machen
+X    --> laden der Gewichte mit Zusatzfunktionen ausstatten, damit nur die passenden Gewichte für das jeweilige Netz geladen werden können sonst User Error message
+X    --> choose_action und choose_train function im dqn agenten und damit in train_dqn nur eine funktion die aufgerufen wird und logik passiert direkt in der klasse
+X    --> init von dqnAgent clean machen indem load_weights als funktion und initialize convdqn als funktion
+X    --> action_dim und input_shape je netz in config definieren
+X    --> netztyp in weights file und plots machen
 X- Ordner "util" in lib erzeugen
-    --> alle _util.py dort hinverschieben --> passende config files erzeugen
+X    --> alle _util.py dort hinverschieben --> passende config files erzeugen
 
 ==> durchgehen ob einzelne Funktionen irgendwo rumfliegen
 
 Src/scripts_rl:
-- plot functions aus "train_DQN.py" in eigene util file --> "plot_util.py" und in lib verschieben
-- Ordner modells best passende Gewichte für alle drei Netze bereitstellen --> über Dateibenennung zuordnung machen?!
+X - plot functions aus "train_DQN.py" in eigene util file --> "plot_util.py" und in lib verschieben
+X - Ordner modells best passende Gewichte für alle drei Netze bereitstellen --> über Dateibenennung zuordnung machen?!
 
 - play_DQN.py betriebsbereit machen und passende config file erzeugen
 
-- config Ordner: Unterordner pro Ordner/Thema aus lib machen und dort config files verwalten
-- DQN.yaml aufsplitten in sinnvolle Unter-YAMLs. --> bspw. workspace_bounds in bullet_env.yaml schieben und damit auch bei play_game.yaml rausschmeißen
-- Config-Aufbau t.b.d
+X - config Ordner: Unterordner pro Ordner/Thema aus lib machen und dort config files verwalten
+X - DQN.yaml aufsplitten in sinnvolle Unter-YAMLs. --> bspw. workspace_bounds in bullet_env.yaml schieben und damit auch bei play_game.yaml rausschmeißen
+X - Config-Aufbau t.b.d
 
-- Q-value learning: Alles mit Minima zurück Maxima ändern
+X - Q-value learning: Alles mit Minima zurück Maxima ändern
 
-- plots mit flag in config file abfragen was man haben will
+X - plots mit flag in config file abfragen was man haben will
 
 
 

@@ -2,9 +2,6 @@ from transform.affine import Affine
 from manipulation.simulation_object import SceneObject
 from bullet_env.util import stdout_redirected, get_link_index
 
-from manipulation.task.simple_push_task import PushArea
-
-
 class BulletEnv:
     def __init__(self, bullet_client, coordinate_axes_urdf_path):
         self.bullet_client = bullet_client

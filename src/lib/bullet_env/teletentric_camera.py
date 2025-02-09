@@ -1,11 +1,7 @@
 import numpy as np
 import pybullet as p
-import cv2
 from transform.affine import Affine
 from bullet_env.camera import BulletCamera
-
-from loguru import logger
-
 
 class TeletentricCamera(BulletCamera):
     def __init__(self, bullet_client, t_center, robot, height, resolution, intrinsics, depth_range, record_depth, orthographic_bounds):

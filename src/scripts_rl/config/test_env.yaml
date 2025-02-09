@@ -2,6 +2,7 @@ defaults:
   - defaults
   - task_factory: simple_push_task
   - camera_factory: static
+  - teletentric_camera: ../camera_factory/teletentric_camera_config
   - _self_
 
 debug: true

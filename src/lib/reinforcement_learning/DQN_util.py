@@ -407,11 +407,11 @@ class DQNAgent_ResNet:
             # Extract the local neighborhood
             local_heatmap = heatmap_smoothed[y_min:y_max, x_min:x_max]
 
-            # Find the minium value in the local neighborhood
-            min_index_local = np.unravel_index(np.argmin(local_heatmap), local_heatmap.shape)
+            # Find the maximum value in the local neighborhood
+            max_index_local = np.unravel_index(np.argmax(local_heatmap), local_heatmap.shape)
 
             # Map the local index back to global coordinates
-            global_index = (min_index_local[0] + y_min, min_index_local[1] + x_min)
+            global_index = (max_index_local[0] + y_min, max_index_local[1] + x_min)
 
             # Append the maximum Q-value from the local neighborhood
             next_values.append(heatmap_smoothed[global_index])
@@ -685,11 +685,11 @@ class DQNAgent_FCN:
             # Extract the local neighborhood
             local_heatmap = heatmap_smoothed[y_min:y_max, x_min:x_max]
 
-            # Find the minium value in the local neighborhood
-            min_index_local = np.unravel_index(np.argmin(local_heatmap), local_heatmap.shape)
+            # Find the maximum value in the local neighborhood
+            max_index_local = np.unravel_index(np.argmax(local_heatmap), local_heatmap.shape)
 
             # Map the local index back to global coordinates
-            global_index = (min_index_local[0] + y_min, min_index_local[1] + x_min)
+            global_index = (max_index_local[0] + y_min, max_index_local[1] + x_min)
 
             # Append the maximum Q-value from the local neighborhood
             next_values.append(heatmap_smoothed[global_index])
@@ -887,7 +887,7 @@ class DQNAgent_CNN:
             logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
             action = np.zeros(self.action_dim)
             action[np.random.choice(self.action_dim)] = 1
-            self.agent_actions.append(action)
+            self.supervisor_actions.append(action) # technically not needed
 
             return action, absolute_movement        
         

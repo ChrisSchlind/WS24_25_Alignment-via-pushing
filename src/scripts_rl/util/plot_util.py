@@ -20,7 +20,6 @@ def plot_action_history(agent_actions, episode, plot_dir, model_type):
     plt.savefig(f"{plot_dir}/agent_{model_type}_actions_{episode}.png")
     plt.close()
 
-
 def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir, model_type):
     # Create the figure and the first y-axis
     fig, ax1 = plt.subplots()
@@ -51,7 +50,6 @@ def plot_rewards_epsilons(rewards, epsilons, episode, plot_dir, model_type):
     # Save the rewards and epsilons to a CSV file
     data = np.column_stack((rewards, epsilons))
     np.savetxt(f"{plot_dir}/dqn_{model_type}_rewards_epsilons_{episode}.csv", data, delimiter=",", header="Reward,Epsilon", comments="")
-
 
 def plot_losses_epsilons(losses, epsilons, episode, plot_dir, model_type):
     # Create the figure and the first y-axis
