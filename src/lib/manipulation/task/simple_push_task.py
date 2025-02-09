@@ -11,7 +11,7 @@ from loguru import logger
 class PushObjectFactory:
     def __init__(self, objects_root: str, object_types: Union[List[str], None] = None):
         self.objects_root = objects_root
-        if object_types is None:
+        if object_types is None or len(object_types) == 0:
             self.object_types = [f.name for f in os.scandir(objects_root) if f.is_dir()]
         else:
             self.object_types = object_types
