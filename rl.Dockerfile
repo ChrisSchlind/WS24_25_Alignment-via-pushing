@@ -3,8 +3,6 @@
 ##############################################################################
 ARG TENSORFLOW_VERSION=2.11.0
 
-# CPU or GPU:
-#FROM tensorflow/tensorflow:${TENSORFLOW_VERSION}
 FROM tensorflow/tensorflow:$TENSORFLOW_VERSION-gpu AS tf-base
 
 USER root

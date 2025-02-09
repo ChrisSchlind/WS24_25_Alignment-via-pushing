@@ -1,0 +1,4 @@
+Information:
+Add both the .index and .data-00000-of-00001 to this folder!!!
+
+Adress weights in config/agent/dqn_cnn.yaml and add weights_path and activate "use_pretrained_best_model"  and "auto_set_epsilon"

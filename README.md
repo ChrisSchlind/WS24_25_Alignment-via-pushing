@@ -2,29 +2,36 @@
 
 This repository contains the code for the robot programming course (the policy learning part) at the University of Applied Sciences Karlsruhe.
 
-We will use and update this repository throughout the course. Hello.
+We will use and update this repository throughout the course.
 
 ## Quick start
 
 ### Environment setup
 
-**Requirements:** have docker installed including the post-installation steps.
+**Requirements:** Have docker installed including the post-installation steps.
 
-**Note:** The default settings are for nvidia GPU support. If you don't have an nvidia GPU, open up `build_image.sh` and set the `render` argument to `base`. Also, remove the `--gpus all` flag from the `docker run` command in `run_container.sh`.
+**Note:** The default settings are for nvidia GPU support. If you don't have an nvidia GPU, remove the `--gpus all` flag from the `docker run` command in `run_container_rl.sh`.
 
 **WSL2:** You can also use Docker with WSL2 on Windows. Make sure to follow the [Docker WSL2 installation guide](https://docs.docker.com/docker-for-windows/wsl/) to set up Docker with WSL2.
 
 Build the docker image with
 
 ```bash
-./build_image.sh
+./build_image_rl.sh
 ```
 
 Run the container with
 ```bash
-./run_container.sh
+./run_container_rl.sh
 ```
 
+## Task
+
+### Alignment via Pushing:​
+
+The workspace contains objects of different shapes and colors, with a designated area for each object. The task is for the robot to push the objects into areas that are shaped to match the object (e.g. a circular object into a circular area). The objects and areas should be randomly placed, and the robot must align each object to its corresponding area by pushing.
+
+![Task Description](./docs/task_description.png)
 
 ## Script Descriptions
 

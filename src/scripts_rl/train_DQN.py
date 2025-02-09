@@ -69,10 +69,12 @@ def main(cfg: DictConfig) -> None:
     # Check if the model directory exists, if not create it
     if not os.path.exists(cfg.model_dir):
         os.makedirs(cfg.model_dir)
+        logger.info(f"Model directory created at {cfg.model_dir}")
 
     # Check if the plot directory exists, if not create it
     if not os.path.exists(cfg.plot_dir):
         os.makedirs(cfg.plot_dir)
+        logger.info(f"Plot directory created at {cfg.plot_dir}")
 
     # Training loop
     for episode in range(cfg.num_episodes):

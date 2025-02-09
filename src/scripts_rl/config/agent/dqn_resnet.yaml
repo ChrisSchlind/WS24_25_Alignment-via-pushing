@@ -8,7 +8,7 @@ epsilon_min: 0.1
 supervisor_epsilon: 0.5
 
 # Pretrained weights
-weights_dir: "models/best/ResNet"
+weights_dir: "models/best/ResNet" # needs to be manually created
 weights_path: "" # example: "dqn_ResNet_episode_1000"
 use_pretrained_best_model: False
 auto_set_epsilon: False
