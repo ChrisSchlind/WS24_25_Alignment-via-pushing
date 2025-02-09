@@ -33,6 +33,7 @@ class PushingEnv(BulletEnv):
         activate_no_movement_punishment,
         activate_objects_outside_workspace_punishment,
         angle_obj_area_tcp_threshold,
+        training=True,
         max_steps=200,
         coordinate_axes_urdf_path=None,
     ):
@@ -63,6 +64,7 @@ class PushingEnv(BulletEnv):
         self.activate_no_movement_punishment = activate_no_movement_punishment
         self.activate_objects_outside_workspace_punishment = activate_objects_outside_workspace_punishment
         self.angle_obj_area_tcp_threshold = angle_obj_area_tcp_threshold
+        self.training = training
         self.dist_list = []
         self.old_dist = []
         self.iou_list = []
@@ -77,12 +79,13 @@ class PushingEnv(BulletEnv):
         self.image_size = (84, 84)
 
         # User info
-        logger.info("Training with following activated rewards:")
-        logger.info(f"Distance TCP-Object Reward: {self.activate_distance_TCP_obj_reward}")
-        logger.info(f"Distance Object-Area Reward: {self.activate_distance_obj_area_reward}")
-        logger.info(f"IoU Reward: {self.activate_iou_reward}")
-        logger.info(f"Moves without positive reward Reward: {self.activate_moves_without_positive_reward}")
-        logger.info(f"No movement punishment Reward: {self.activate_no_movement_punishment}")
+        if self.training:
+            logger.info("Training with following activated rewards:")
+            logger.info(f"Distance TCP-Object Reward: {self.activate_distance_TCP_obj_reward}")
+            logger.info(f"Distance Object-Area Reward: {self.activate_distance_obj_area_reward}")
+            logger.info(f"IoU Reward: {self.activate_iou_reward}")
+            logger.info(f"Moves without positive reward Reward: {self.activate_moves_without_positive_reward}")
+            logger.info(f"No movement punishment Reward: {self.activate_no_movement_punishment}")
 
     def reset(self):
         """Reset environment and return initial state"""
@@ -138,7 +141,8 @@ class PushingEnv(BulletEnv):
         self.current_step += 1
         failed = False
 
-        logger.debug(f"Step {self.current_step} with action {action} and absolute_movement {absolute_movement}.")
+        if self.training:
+            logger.debug(f"Step {self.current_step} with action {action} and absolute_movement {absolute_movement}.")
 
         # Reset movement punishment flag
         self.movement_punishment = False
@@ -211,8 +215,13 @@ class PushingEnv(BulletEnv):
         # Get new observation
         next_state = self._get_observation()
 
-        # Calculate reward and check if done
-        reward = self._calculate_reward()
+        # Calculate reward
+        if self.training:
+            reward = self._calculate_reward()
+        else:
+            reward = 0.0
+
+        # Check if episode is done
         done = self._check_done()
 
         # Include additional info
@@ -234,13 +243,13 @@ class PushingEnv(BulletEnv):
         """Get RGB + depth observation from orthographic camera"""
         obs, tcp_position_pixel = self.teletentric_camera.get_observation()
 
-        # Resize RGB image (500x500x3 -> 84x84x3)
+        # Resize RGB image
         rgb = cv2.resize(obs["rgb"], self.image_size, interpolation=cv2.INTER_AREA)
 
         # Normalize RGB values between [0,1]
         rgb = rgb / 255.0
 
-        # Resize and normalize depth image (500x500 -> 84x84)
+        # Resize and normalize depth image
         depth = obs["depth"]
         if len(depth.shape) == 3:
             depth = depth[:, :, 0]  # Take first channel if depth is 3D

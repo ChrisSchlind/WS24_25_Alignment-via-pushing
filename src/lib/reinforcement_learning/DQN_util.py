@@ -289,7 +289,13 @@ class DQNAgent_ResNet:
         self.target_model(dummy_state)  # Initialize with correct shape
         logger.debug("Model and Target Model initialized")
 
-    def load_weights(self):
+    def load_weights(self, external_weights_dir=None, external_weights_path=None, training=True):
+        # Load weights from external directory and path
+        if external_weights_path and external_weights_dir:
+            self.use_pretrained_best_model = True
+            self.weights_dir = external_weights_dir
+            self.weights_path = external_weights_path
+
         # Load the weights from the file
         if self.use_pretrained_best_model and self.weights_path:
             try:
@@ -303,7 +309,7 @@ class DQNAgent_ResNet:
                 self.start_episode = int(self.weights_path.split("_")[-1])
 
                 # Calculate the epsilon value based on the episode number and current set of parameters
-                if self.auto_set_epsilon:
+                if self.auto_set_epsilon and training:
                     self.epsilon = max(self.epsilon_min, self.epsilon * (self.epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
                     logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
                 else:
@@ -313,7 +319,10 @@ class DQNAgent_ResNet:
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
         else:
-            logger.debug("Starting model with random weights")
+            if training:
+                logger.debug("Starting model with random weights")
+            else:
+                raise ValueError("No weights loaded because no weights path was provided")
 
         # Copy the weights from the main model also to the target model
         self.target_model.set_weights(self.model.get_weights())
@@ -342,7 +351,9 @@ class DQNAgent_ResNet:
             return action, absolute_movement
         
         else:
-            logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+            if training:                
+                logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+
             state = np.expand_dims(state, axis=0)
 
             # Direct continuous output from network
@@ -567,7 +578,13 @@ class DQNAgent_FCN:
         self.target_model(dummy_state)  # Initialize with correct shape
         logger.debug("Model and Target Model initialized")
 
-    def load_weights(self):
+    def load_weights(self, external_weights_dir=None, external_weights_path=None, training=True):
+        # Load weights from external directory and path
+        if external_weights_path and external_weights_dir:
+            self.use_pretrained_best_model = True
+            self.weights_dir = external_weights_dir
+            self.weights_path = external_weights_path
+
         # Load the weights from the file
         if self.use_pretrained_best_model and self.weights_path:
             try:
@@ -581,7 +598,7 @@ class DQNAgent_FCN:
                 self.start_episode = int(self.weights_path.split("_")[-1])
 
                 # Calculate the epsilon value based on the episode number and current set of parameters
-                if self.auto_set_epsilon:
+                if self.auto_set_epsilon and training:
                     self.epsilon = max(self.epsilon_min, self.epsilon * (self.epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
                     logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
                 else:
@@ -591,7 +608,10 @@ class DQNAgent_FCN:
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
         else:
-            logger.debug("Starting model with random weights")
+            if training:
+                logger.debug("Starting model with random weights")
+            else:
+                raise ValueError("No weights loaded because no weights path was provided")
 
         # Copy the weights from the main model also to the target model
         self.target_model.set_weights(self.model.get_weights())
@@ -620,7 +640,9 @@ class DQNAgent_FCN:
             return action, absolute_movement
         
         else:
-            logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+            if training:
+                logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
+
             state = np.expand_dims(state, axis=0)
 
             # Direct continuous output from network
@@ -845,7 +867,13 @@ class DQNAgent_CNN:
         self.target_model(dummy_state)  # Initialize with correct shape
         logger.debug("Model and Target Model initialized")
 
-    def load_weights(self):
+    def load_weights(self, external_weights_dir=None, external_weights_path=None, training=True):
+        # Load weights from external directory and path
+        if external_weights_path and external_weights_dir:
+            self.use_pretrained_best_model = True
+            self.weights_dir = external_weights_dir
+            self.weights_path = external_weights_path
+
         # Load the weights from the file
         if self.use_pretrained_best_model and self.weights_path:
             try:
@@ -859,7 +887,7 @@ class DQNAgent_CNN:
                 self.start_episode = int(self.weights_path.split("_")[-1])
 
                 # Calculate the epsilon value based on the episode number and current set of parameters
-                if self.auto_set_epsilon:
+                if self.auto_set_epsilon and training:
                     self.epsilon = max(self.epsilon_min, self.epsilon * (self.epsilon_decay ** (self.start_episode * 200))) # 200 is mean steps per episode
                     logger.debug(f"Setting epsilon to {self.epsilon:.2f} based on the start episode number {self.start_episode}")
                 else:
@@ -869,7 +897,10 @@ class DQNAgent_CNN:
             except Exception as e:
                 logger.error(f"Error loading weights from {weights_file_path}: {e}")
         else:
-            logger.debug("Starting model with random weights")
+            if training:
+                logger.debug("Starting model with random weights")
+            else:
+                raise ValueError("No weights loaded because no weights path was provided")
 
         # Copy the weights from the main model also to the target model
         self.target_model.set_weights(self.model.get_weights())
@@ -891,7 +922,8 @@ class DQNAgent_CNN:
             return action, absolute_movement        
         
         else:
-            logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
+            if training:
+                logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
 
             # Add batch dimension to the state
             state = np.expand_dims(state, axis=0)

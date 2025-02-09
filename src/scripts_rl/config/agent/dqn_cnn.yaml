@@ -15,7 +15,7 @@ auto_set_epsilon: False
 
 # Model parameters
 action_dim: 4
-input_shape: [84, 84, 7]
+input_shape: [84, 84, 7] # 7: 3 RGB, 3 depth, 1 one-hot-encoded TCP
 learning_rate: 0.00025
 
 # Q-Value calculation

@@ -4,6 +4,8 @@ data/models/
 src/scripts_rl/models/dqn/
 src/scripts_rl/models/plot/
 
+src/scripts_rl/models/best/CNN/
+
 # Image
 *.png
 

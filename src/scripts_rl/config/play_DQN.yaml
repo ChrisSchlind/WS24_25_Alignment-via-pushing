@@ -1,0 +1,26 @@
+defaults:
+  - defaults
+  - task_factory: simple_push_task
+  - camera_factory: static
+  - teletentric_camera: ../camera_factory/teletentric_camera_config
+  - agent_resnet: ../agent/dqn_resnet
+  - agent_fcn: ../agent/dqn_fcn
+  - agent_cnn: ../agent/dqn_cnn
+  - _self_
+
+# Switch model type
+model_type: CNN # Possible model types: FCN, CNN, ResNet
+weights_dir: "models/best/CNN"
+weights_path: "dqn_CNN_episode_850" # example: "dqn_CNN_episode_1000" 
+
+# Environment parameters
+debug: true
+render: true
+
+# Run parameters
+num_runs: 5
+max_steps: 100 # per run
+
+# Set training to False to play the game
+pushing_env:
+  training: False # do not change!
