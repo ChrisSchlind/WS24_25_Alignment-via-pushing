@@ -1,6 +1,8 @@
 import tensorflow as tf
 from .resnet import ResNet
 
+from loguru import logger
+
 class ConvDQN_ResNet(tf.keras.Model):
     def __init__(self, initializer=tf.keras.initializers.GlorotUniform()):
         super().__init__()
@@ -17,7 +19,9 @@ class ConvDQN_ResNet(tf.keras.Model):
         self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', kernel_initializer=self.initializer)
 
     def call(self, inputs):
-        # Input shape: (batch_size, 88, 88, 6)
+        # Input shape: (batch_size, 88, 88, 7)
+
+        logger.debug(f"Input shape: {inputs.shape}")
 
         # First ResNet-Block
         x = self.resnet_block_1(inputs)
@@ -30,6 +34,8 @@ class ConvDQN_ResNet(tf.keras.Model):
 
         # Delete the last 2 rows and columns to get the correct heatmap size and remove ResNet errors at the edges
         x = tf.keras.layers.Cropping2D(cropping=((2, 2), (2, 2)))(x)
+
+        logger.debug(f"Output shape: {x.shape}")
 
         # Return the heatmap (no activation because this is a continuous value map)
         return x  # Heatmap of dimension (batch_size, 84, 84, 1)
@@ -53,11 +59,13 @@ class ConvDQN_FCNV2(tf.keras.Model):
         # Final Conv2D layer for the heatmap output (H, W, 1)
         self.heatmap = tf.keras.layers.Conv2D(1, 3, strides=1, padding='same', activation=None, kernel_initializer=self.initializer)
 
-    def call(self, x):
-        # Input shape: (batch_size, 88, 88, 6)
+    def call(self, inputs):
+        # Input shape: (batch_size, 88, 88, 7)
+
+        logger.debug(f"Input shape: {inputs.shape}")
 
         # 4 Conv-Layers
-        x = self.conv1(x)
+        x = self.conv1(inputs)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
@@ -73,6 +81,8 @@ class ConvDQN_FCNV2(tf.keras.Model):
 
         # Crop the heatmap to the desired size of 84x84
         x = tf.keras.layers.Cropping2D(cropping=((2, 2), (2, 2)))(x)
+
+        logger.debug(f"Output shape: {x.shape}")
 
         # Return the heatmap (no activation because this is a continuous value map)
         return x  # Heatmap of dimension (batch_size, 84, 84, 1)
@@ -97,11 +107,13 @@ class ConvDQN_CNNV2(tf.keras.Model):
         # Output layer for classification with action_dim classes and softmax activation
         self.output_layer = tf.keras.layers.Dense(action_dim, activation="softmax")
 
-    def call(self, x):
-        # Input shape: (batch_size, 88, 88, 6)
+    def call(self, inputs):
+        # Input shape: (batch_size, 84, 84, 7)
+
+        logger.debug(f"Input shape: {inputs.shape}")
 
         # Convolutional layers
-        x = self.conv1(x)
+        x = self.conv1(inputs)
         x = self.conv2(x)
         x = self.conv3(x)
 
@@ -115,5 +127,7 @@ class ConvDQN_CNNV2(tf.keras.Model):
 
         # Output layer for classification
         x = self.output_layer(x)
+
+        logger.debug(f"Output shape: {x.shape}")
 
         return x  # Output is the index of the maximum value in the output vector

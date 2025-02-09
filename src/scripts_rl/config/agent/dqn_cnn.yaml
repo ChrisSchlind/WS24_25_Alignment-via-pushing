@@ -1,20 +1,20 @@
 _target_: reinforcement_learning.DQN_util.DQNAgent_CNN
 
 # Parameters for DQN Agent
-# 1. Exploration rate
+# Exploration rate
 epsilon: 0.8
 epsilon_decay: 0.99995
 epsilon_min: 0.1
-epsilon_supervisor: 0.5
+supervisor_epsilon: 0.5
 
 # Pretrained weights
-weights_dir: "models/best"
+weights_dir: "models/best/CNN"
 weights_path: "" # example: "dqn_CNN_episode_1000"
 use_pretrained_best_model: False
 auto_set_epsilon: False
 
 # Model parameters
-action_dim: 0
+action_dim: 4
 input_shape: [84, 84, 7]
 learning_rate: 0.00025
 

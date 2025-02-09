@@ -35,12 +35,20 @@ def main(cfg: DictConfig) -> None:
     logger.info("Teletentric camera instantiation completed.")
 
     # Create environment with all components
-    pushing_env = instantiate(cfg.training, bullet_client=bullet_client, robot=robot, task_factory=task_factory, teletentric_camera=teletentric_camera)
+    pushing_env = instantiate(cfg.pushing_env, bullet_client=bullet_client, robot=robot, task_factory=task_factory, teletentric_camera=teletentric_camera)
+    logger.info(f"Pushing Env class: {pushing_env.__class__.__name__}")
     logger.info("Environment instantiation completed.")
 
     # Initialize DQN agent
-    agent = instantiate(cfg.agent, model_type=cfg.model_type)
-    agent = agent.set_model()
+    if cfg.model_type == "ResNet":
+        agent = instantiate(cfg.agent_resnet)        
+    elif cfg.model_type == "FCN":
+        agent = instantiate(cfg.agent_fcn)
+    elif cfg.model_type == "CNN":
+        agent = instantiate(cfg.agent_cnn)
+    else:
+        raise ValueError(f"Unknown model type: {cfg.model_type}")
+    
     logger.info(f"Agent class: {agent.__class__.__name__}")
     logger.info("DQN agent instantiation completed.")
 
@@ -77,7 +85,7 @@ def main(cfg: DictConfig) -> None:
         episode_reward = 0
 
         # Adjust max steps per episode for the first few episodes to improve learning speed
-        if cfg.weights_path:  # if pretrained model is loaded, use max steps from config
+        if agent.weights_path:  # if pretrained model is loaded, use max steps from config
             max_steps = cfg.max_steps_per_episode
         else:
             max_steps = min(cfg.max_steps_per_episode, (episode + 1) * 10)
@@ -95,7 +103,7 @@ def main(cfg: DictConfig) -> None:
             replay_buffer.put(state, action, reward, next_state, done)
 
             if replay_buffer.size() >= cfg.batch_size:
-                loss = agent.train(replay_buffer, cfg.batch_size)
+                loss = agent.train(replay_buffer, cfg.batch_size, cfg.train_start_size, cfg.window_size)
                 if loss is None:
                     loss = 0.0
             else:

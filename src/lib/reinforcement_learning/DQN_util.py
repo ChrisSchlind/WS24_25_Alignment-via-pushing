@@ -8,8 +8,7 @@ import cv2
 import copy
 import scipy.ndimage
 from .DQN import ConvDQN_ResNet, ConvDQN_FCNV2, ConvDQN_CNNV2
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 class PrioritizedReplayBuffer:
     def __init__(
@@ -247,7 +246,7 @@ class DQNAgent_ResNet:
         weights_dir="models/best",
         use_pretrained_best_model=False,
         auto_set_epsilon=True,
-        action_dim=None,
+        action_dim=2,
         input_shape=(88, 88, 7),
         learning_rate=0.00025,
     ):
@@ -261,7 +260,7 @@ class DQNAgent_ResNet:
         self.use_pretrained_best_model = use_pretrained_best_model
         self.auto_set_epsilon = auto_set_epsilon
         self.action_dim = action_dim
-        self.input_shape = input_shape
+        self.input_shape = tuple(input_shape)
         self.learning_rate = learning_rate
         self.agent_actions = []
         self.supervisor_actions = []
@@ -277,8 +276,8 @@ class DQNAgent_ResNet:
 
     def initialize_model(self):
         # Create main and target model based on config file  
-        self.model = ConvDQN_ResNet(input_shape=self.input_shape)
-        self.target_model = ConvDQN_ResNet(input_shape=self.input_shape)
+        self.model = ConvDQN_ResNet()
+        self.target_model = ConvDQN_ResNet()
         logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
 
         # Build models with dummy input
@@ -322,6 +321,9 @@ class DQNAgent_ResNet:
         # With probability epsilon, take a random action (exploration) or ask the supervisor for an action
         # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
 
+        # Set absolute movement
+        absolute_movement = True
+
         if training and np.random.random() < self.epsilon:
 
             if np.random.random() < self.supervisor_epsilon:
@@ -334,7 +336,7 @@ class DQNAgent_ResNet:
                 action = np.random.uniform(-1, 1, self.action_dim)
                 self.supervisor_actions.append(action)
 
-            return action
+            return action, absolute_movement
         
         else:
             logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
@@ -353,19 +355,16 @@ class DQNAgent_ResNet:
         if len(self.supervisor_actions) > 10500:
             self.supervisor_actions = self.supervisor_actions[-10500:]
 
-        # Set absolute movement
-        absolute_movement = True
-
         return action, absolute_movement
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
+    def train(self, replay_buffer, batch_size=32, train_start_size=10000, window_size=5):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
             return
 
         # Sample a batch from the replay buffer
-        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size)
 
         # Predict heatmaps for the next states using the target model
         target_heatmaps = self.target_model(next_states).numpy()  # (batch_size, H, W, 1)
@@ -525,7 +524,7 @@ class DQNAgent_FCN:
         weights_dir="models/best",
         use_pretrained_best_model=False,
         auto_set_epsilon=True,
-        action_dim=None,
+        action_dim=2,
         input_shape=(88, 88, 7),
         learning_rate=0.00025,
     ):
@@ -539,7 +538,7 @@ class DQNAgent_FCN:
         self.use_pretrained_best_model = use_pretrained_best_model
         self.auto_set_epsilon = auto_set_epsilon
         self.action_dim = action_dim
-        self.input_shape = input_shape
+        self.input_shape = tuple(input_shape)
         self.learning_rate = learning_rate
         self.agent_actions = []
         self.supervisor_actions = []
@@ -555,8 +554,8 @@ class DQNAgent_FCN:
 
     def initialize_model(self):
         # Create main and target model based on config file  
-        self.model = ConvDQN_FCNV2(input_shape=self.input_shape)
-        self.target_model = ConvDQN_FCNV2(input_shape=self.input_shape)
+        self.model = ConvDQN_FCNV2()
+        self.target_model = ConvDQN_FCNV2()
         logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
 
         # Build models with dummy input
@@ -600,6 +599,9 @@ class DQNAgent_FCN:
         # With probability epsilon, take a random action (exploration) or ask the supervisor for an action
         # With probability 1 - epsilon, take the action with the highest Q-value (exploitation)
 
+        # Set absolute movement
+        absolute_movement = True
+
         if training and np.random.random() < self.epsilon:
 
             if np.random.random() < self.supervisor_epsilon:
@@ -612,7 +614,7 @@ class DQNAgent_FCN:
                 action = np.random.uniform(-1, 1, self.action_dim)
                 self.supervisor_actions.append(action)
 
-            return action
+            return action, absolute_movement
         
         else:
             logger.info(f"  Agent-Action    with epsilon {self.epsilon:.2f}")
@@ -631,19 +633,16 @@ class DQNAgent_FCN:
         if len(self.supervisor_actions) > 10500:
             self.supervisor_actions = self.supervisor_actions[-10500:]
 
-        # Set absolute movement
-        absolute_movement = True
-
         return action, absolute_movement
 
-    def train(self, replay_buffer, batch_size=32, train_start_size=10000, beta=0.4, window_size=5):
+    def train(self, replay_buffer, batch_size=32, train_start_size=10000, window_size=5):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
             return
 
         # Sample a batch from the replay buffer
-        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size)
 
         # Predict heatmaps for the next states using the target model
         target_heatmaps = self.target_model(next_states).numpy()  # (batch_size, H, W, 1)
@@ -817,7 +816,7 @@ class DQNAgent_CNN:
         self.use_pretrained_best_model = use_pretrained_best_model
         self.auto_set_epsilon = auto_set_epsilon
         self.action_dim = action_dim
-        self.input_shape = input_shape
+        self.input_shape = tuple(input_shape)
         self.learning_rate = learning_rate
         self.agent_actions = []
         self.supervisor_actions = []
@@ -833,8 +832,8 @@ class DQNAgent_CNN:
 
     def initialize_model(self):
         # Create main and target model based on config file  
-        self.model = ConvDQN_CNNV2(input_shape=self.input_shape)
-        self.target_model = ConvDQN_CNNV2(input_shape=self.input_shape)
+        self.model = ConvDQN_CNNV2(action_dim=self.action_dim)
+        self.target_model = ConvDQN_CNNV2(action_dim=self.action_dim)
         logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
 
         # Build models with dummy input
@@ -877,12 +876,16 @@ class DQNAgent_CNN:
         # Explanation of the epsilon-greedy strategy:
         # With probability epsilon, take a random action (exploration) 
 
+        # Set absolute movement
+        absolute_movement = False
+
         if training and np.random.random() < self.epsilon:
             logger.info(f"Random action taken with epsilon {self.epsilon:.2f}")
             action = np.zeros(self.action_dim)
             action[np.random.choice(self.action_dim)] = 1
             self.agent_actions.append(action)
-            return action
+
+            return action, absolute_movement        
         
         else:
             logger.info(f"Agent-Action with epsilon {self.epsilon:.2f}")
@@ -900,20 +903,16 @@ class DQNAgent_CNN:
         if len(self.agent_actions) > 10500:
             self.agent_actions = self.agent_actions[-10500:]
 
-        # Set absolute movement
-        absolute_movement = False
-
         return action, absolute_movement
 
-
-    def train(self, replay_buffer, batch_size=32, train_start_size=4000, beta=0.4):
+    def train(self, replay_buffer, batch_size=32, train_start_size=10000, window_size=None):
         # Check if the replay buffer has enough samples to train
         if replay_buffer.size() < batch_size or replay_buffer.size() < train_start_size:
             logger.info(f"Replay buffer size: {replay_buffer.size()} is less than batch size: {batch_size} or train start size: {train_start_size}. Skip training.")
             return
 
         # Sample a batch from the replay buffer
-        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size, beta)
+        states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size)
 
         # Compute the target Q-values
         targets = self.target_model(states).numpy()
@@ -951,26 +950,3 @@ class DQNAgent_CNN:
 
     def update_target(self):
         self.target_model.set_weights(self.model.get_weights())
-    
-class DQNAgent:
-    def __init__(
-        self,
-        model_type="FCN",
-        dqn_agent_resnet=None,
-        dqn_agent_fcn=None,
-        dqn_agent_cnn=None,
-    ):        
-        self.model_type = model_type
-
-        # Choose the correct agent based on the model type
-        if model_type == "FCN":
-            self.agent = dqn_agent_fcn
-        elif model_type == "CNN":
-            self.agent = dqn_agent_cnn
-        elif model_type == "ResNet":
-            self.agent = dqn_agent_resnet
-        else:
-            raise ValueError(f"Invalid model type: {model_type}")
-        
-    def set_model(self):
-        return self.agent

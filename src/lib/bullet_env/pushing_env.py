@@ -138,6 +138,8 @@ class PushingEnv(BulletEnv):
         self.current_step += 1
         failed = False
 
+        logger.debug(f"Step {self.current_step} with action {action} and absolute_movement {absolute_movement}.")
+
         # Reset movement punishment flag
         self.movement_punishment = False
 

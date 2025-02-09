@@ -1,9 +1,36 @@
 _target_: bullet_env.pushing_env.PushingEnv
 coordinate_axes_urdf_path: ${data_root}/assets/util/coordinate_axes.urdf
 
+# General
 bullet_client: ${bullet_client}
 robot: ${robot}
 task_factory: ${task_factory}
 teletentric_camera: ${teletentric_camera}
+
+# General configuration for DQN training
 workspace_bounds: ${workspace_bounds}
 movement_bounds: ${movement_bounds}
+gripper_offset: ${gripper_offset}
+fixed_z_height: ${fixed_z_height}
+
+# Training configuration
+step_size: 0.1
+
+# Reward
+# Idea: Only activate one reward at a time, to see the effect of each reward
+activate_distance_obj_area_reward: True
+distance_obj_area_reward_scale: 5000
+activate_distance_TCP_obj_reward: True
+distance_TCP_obj_reward_scale: 25 
+angle_obj_area_tcp_threshold: 45.0 # in degree
+activate_iou_reward: True
+iou_reward_scale: 5
+activate_moves_without_positive_reward: False
+max_moves_without_positive_reward: 5
+activate_no_movement_punishment: False
+no_movement_threshold: 0.02
+activate_objects_outside_workspace_punishment: False
+
+# Parameters to determine if task is done
+success_threshold_trans: 0.03
+success_threshold_rot: 22.5

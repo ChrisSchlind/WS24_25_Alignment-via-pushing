@@ -1,6 +1,9 @@
 defaults:
   - default_hydra_config
   - default_workspace_bounds
+  - default_movement_bounds
+  - default_gripper_offset
+  - default_fixed_z_height
   - pushing_env: pushing_env
   - robot: ur10_cell
 
