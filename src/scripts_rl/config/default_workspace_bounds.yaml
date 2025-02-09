@@ -1,5 +1,0 @@
-# Workspace bounds (in meters)
-workspace_bounds:
-  - [0.3, 0.9]   # x bounds
-  - [-0.3, 0.3]  # y bounds
-  - [-0.0125, 0.35] # z bounds
