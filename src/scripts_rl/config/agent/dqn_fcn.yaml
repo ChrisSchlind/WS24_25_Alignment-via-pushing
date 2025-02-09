@@ -9,9 +9,9 @@ supervisor_epsilon: 0.5
 
 # Pretrained weights
 weights_dir: "models/best/FCN"
-weights_path: "dqn_FCN_episode_1400" # example: "dqn_FCN_episode_1000"
-use_pretrained_best_model: True
-auto_set_epsilon: True
+weights_path: "" # example: "dqn_FCN_episode_1000"
+use_pretrained_best_model: False
+auto_set_epsilon: False
 
 # Model parameters
 action_dim: 2

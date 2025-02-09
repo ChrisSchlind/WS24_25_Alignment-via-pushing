@@ -278,7 +278,7 @@ class DQNAgent_ResNet:
         # Create main and target model based on config file  
         self.model = ConvDQN_ResNet()
         self.target_model = ConvDQN_ResNet()
-        logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
+        logger.debug(f"ResNet models chosen with input shape: {self.input_shape}")
 
         # Build models with dummy input
         dummy_state = np.zeros((1,) + self.input_shape)
@@ -834,7 +834,7 @@ class DQNAgent_CNN:
         # Create main and target model based on config file  
         self.model = ConvDQN_CNNV2(action_dim=self.action_dim)
         self.target_model = ConvDQN_CNNV2(action_dim=self.action_dim)
-        logger.debug(f"FCN models chosen with input shape: {self.input_shape}")
+        logger.debug(f"CNN models chosen with input shape: {self.input_shape}")
 
         # Build models with dummy input
         dummy_state = np.zeros((1,) + self.input_shape)
