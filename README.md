@@ -62,6 +62,13 @@ plot_dir: "plots/"
 # ... other parameters ...
 ```
 
+### Configuration File Locations
+There are many other configuration files in the `config` directory. The following two are particularly noteworthy:
+- The rewards for the training are specified in the `config/pushing_env/pushing_env.yaml` file.
+- Each DQN agent network type has its own configuration file located in the `config/agent` directory.
+
+The rest of the configuration files are self-explanatory and can be explored as needed.
+
 ### How to Change Parameters
 1. Open the relevant YAML file in the `config` directory.
 2. Locate the parameter you want to change.
