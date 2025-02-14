@@ -51,16 +51,16 @@ This script is used to run a trained DQN agent in the pushing environment. It lo
 
 ### main
 Final version that can handle all three network types/architectures 'ResNet', 'FCN' (Fully Convolutional Network) and 'CNN' (Convolutional Neural Network) by changing the `model_type` parameter in  `config/train_DQN.yaml`. This branch is completely organised with configuration files to work with hydra and implements all experiences and lessons learned directly for all three networks. To do this, it was necessary to bring the three structures to the same level, which is why there are no pre-trained weights. These can now be generated with this repository.
-Furthermore, this branch contains all the lessons learned collected during the project in the `RL_knowledge.txt` (german) file.
+Furthermore, this branch contains all the lessons learned collected during the project in the `RL_knowledge.txt` (german) file. This is the only branch where the lessons learned and the README file are completed. All other branches represent an interim status of the project.
 
 ### ConvDQN_ResNet_V1
-To use the latest version of the ResNet-ConvDQN, this branch can be selected. It reflects the interim status up to 22/01/2025. Furthermore, weights are already provided for this. It should be noted that the ResNet architecture achieved the worst results in the tests.
+To use the latest version of the ResNet-ConvDQN, this branch can be selected. It reflects the interim status up to 22/01/2025. Furthermore, weights are already provided for this. The file structure is not finalised and a large configuration file `DQN.yaml` is used. Complete functionality cannot be guaranteed, as features such as the `train` function have not yet been finalised. It should be noted that the ResNet architecture achieved the worst results in the tests.
 
 ### ConvDQN_FCN_V2
-To use the latest version of the FCN-ConvDQN, this branch can be selected. It reflects the interim status up to 28/01/2025. Furthermore, weights are already provided for this.
+To use the latest version of the FCN-ConvDQN, this branch can be selected. It reflects the interim status up to 28/01/2025. Furthermore, weights are already provided for this. The file structure is not finalised and a large configuration file `DQN.yaml` is used. Complete functionality cannot be guaranteed, as features such as the `train` function have not yet been finalised.
 
 ### ConvDQN_CNN_V2
-To use the latest version of the ResNet-ConvDQN, this branch can be selected. It reflects the interim status up to 29/01/2025. No weights can be provided for this network as these exceed the file size of git.
+To use the latest version of the ResNet-ConvDQN, this branch can be selected. It reflects the interim status up to 29/01/2025. No weights can be provided for this network as these exceed the file size of git. The file structure is not finalised and a large configuration file `DQN.yaml` is used. Complete functionality cannot be guaranteed, as features such as the `train` function have not yet been finalised.
 
 ## Changing Parameters
 
