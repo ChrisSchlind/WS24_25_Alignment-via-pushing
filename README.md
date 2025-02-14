@@ -47,6 +47,21 @@ This script allows manual control of the robot in the pushing environment. It pr
 ### play_DQN.py
 This script is used to run a trained DQN agent in the pushing environment. It loads the trained model and runs test episodes. It can also render the environment to visualize the agent's performance.
 
+## Branch Descriptions
+
+### main
+Final version that can handle all three network types/architectures 'ResNet', 'FCN' (Fully Convolutional Network) and 'CNN' (Convolutional Neural Network) by changing the `model_type` parameter in  `config/train_DQN.yaml`. This branch is completely organised with configuration files to work with hydra and implements all experiences and lessons learned directly for all three networks. To do this, it was necessary to bring the three structures to the same level, which is why there are no pre-trained weights. These can now be generated with this repository.
+Furthermore, this branch contains all the lessons learned collected during the project in the `RL_knowledge.txt` (german) file.
+
+### ConvDQN_ResNet_V1
+To use the latest version of the ResNet-ConvDQN, this branch can be selected. It reflects the interim status up to 22/01/2025. Furthermore, weights are already provided for this. It should be noted that the ResNet architecture achieved the worst results in the tests.
+
+### ConvDQN_FCN_V2
+To use the latest version of the FCN-ConvDQN, this branch can be selected. It reflects the interim status up to 28/01/2025. Furthermore, weights are already provided for this.
+
+### ConvDQN_CNN_V2
+To use the latest version of the ResNet-ConvDQN, this branch can be selected. It reflects the interim status up to 29/01/2025. No weights can be provided for this network as these exceed the file size of git.
+
 ## Changing Parameters
 
 ### YAML Configuration Files
